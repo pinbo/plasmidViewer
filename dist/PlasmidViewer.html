@@ -179,13 +179,13 @@ svg.map.lin { width: auto; height: auto; }
 .mp-lbl.hov, .mp-flbl.hov { fill: #e5322d; stroke: #e5322d; stroke-width: .6px; paint-order: stroke; }
 .mp-flbl.hov { fill: #fff; stroke: #e5322d; stroke-width: 3px; paint-order: stroke; }
 .fbar.hov { box-shadow: inset 0 0 0 2px #e5322d; }
-#tip { display: none; position: fixed; z-index: 90; pointer-events: none; min-width: 190px; max-width: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 9px 12px; font-size: 12px; }
-#tip .th { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
-#tip .th i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-#tip .tr { display: flex; justify-content: space-between; gap: 14px; padding: 1px 0; }
-#tip .tr span { color: var(--muted); }
-#tip .tr b { font-weight: 600; text-align: right; }
-#tip .tn { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border); color: var(--muted); }
+#tip, #aaTip { display: none; position: fixed; z-index: 90; pointer-events: none; min-width: 190px; max-width: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 9px 12px; font-size: 12px; }
+#tip .th, #aaTip .th { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+#tip .th i, #aaTip .th i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+#tip .tr, #aaTip .tr { display: flex; justify-content: space-between; gap: 14px; padding: 1px 0; }
+#tip .tr span, #aaTip .tr span { color: var(--muted); }
+#tip .tr b, #aaTip .tr b { font-weight: 600; text-align: right; }
+#tip .tn, #aaTip .tn { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border); color: var(--muted); }
 
 /* modal, menus, toasts */
 .backdrop { position: fixed; inset: 0; background: rgba(10,15,25,.45); display: flex; align-items: center; justify-content: center; z-index: 50; backdrop-filter: blur(2px); }
@@ -224,26 +224,26 @@ body.dragging #dropHint { display: flex; }
 
 /* enzyme pop-up */
 #tip.enzTip { max-width: 360px; min-width: 300px; }
-#tip .tr.hl { background: var(--accent-weak); border-radius: 6px; margin: 2px -6px 4px; padding: 3px 6px; }
-#tip .tr.hl b { color: var(--accent); }
-#tip .sec { margin: 8px 0 3px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
-#tip .tag { margin-left: auto; font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--accent); color: #fff; }
-#tip .th { margin-right: 0; }
-#tip code { font-size: 11px; }
-#tip .acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 3px 0 5px; }
-#tip .acts span { text-align: center; border-radius: 6px; padding: 2px 0 3px; font-weight: 700; font-size: 12px; background: var(--panel2); border: 1px solid var(--border); }
-#tip .acts i { display: block; font-style: normal; font-size: 9.5px; font-weight: 500; color: var(--muted); }
-#tip .acts .hi { background: rgba(46,184,114,.2); border-color: rgba(46,184,114,.6); }
-#tip .acts .mid { background: rgba(242,155,52,.2); border-color: rgba(242,155,52,.6); }
-#tip .acts .lo { opacity: .65; }
+#tip .tr.hl, #aaTip .tr.hl { background: var(--accent-weak); border-radius: 6px; margin: 2px -6px 4px; padding: 3px 6px; }
+#tip .tr.hl b, #aaTip .tr.hl b { color: var(--accent); }
+#tip .sec, #aaTip .sec { margin: 8px 0 3px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+#tip .tag, #aaTip .tag { margin-left: auto; font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--accent); color: #fff; }
+#tip .th, #aaTip .th { margin-right: 0; }
+#tip code, #aaTip code { font-size: 11px; }
+#tip .acts, #aaTip .acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 3px 0 5px; }
+#tip .acts span, #aaTip .acts span { text-align: center; border-radius: 6px; padding: 2px 0 3px; font-weight: 700; font-size: 12px; background: var(--panel2); border: 1px solid var(--border); }
+#tip .acts i, #aaTip .acts i { display: block; font-style: normal; font-size: 9.5px; font-weight: 500; color: var(--muted); }
+#tip .acts .hi, #aaTip .acts .hi { background: rgba(46,184,114,.2); border-color: rgba(46,184,114,.6); }
+#tip .acts .mid, #aaTip .acts .mid { background: rgba(242,155,52,.2); border-color: rgba(242,155,52,.6); }
+#tip .acts .lo, #aaTip .acts .lo { opacity: .65; }
 .item.enz[data-enz]:hover { background: var(--accent-weak); }
 
 /* recognition sites + cut marks appear only while hovering the enzyme name */
 .eshade.hov, .ezig.hov { display: block; }
 #posTip { display: none; position: fixed; z-index: 85; pointer-events: none; background: #1f2630; color: #fff; font: 600 11.5px var(--mono); padding: 3px 8px; border-radius: 6px; box-shadow: var(--shadow); white-space: nowrap; }
 
-#tip .tn u { text-decoration: none; font: 600 10.5px var(--mono); color: var(--accent); margin-right: 5px; }
-#tip .tn + .tn { border-top: 0; margin-top: 2px; padding-top: 0; }
+#tip .tn u, #aaTip .tn u { text-decoration: none; font: 600 10.5px var(--mono); color: var(--accent); margin-right: 5px; }
+#tip .tn + .tn, #aaTip .tn + .tn { border-top: 0; margin-top: 2px; padding-top: 0; }
 #tip.enzTip { max-height: calc(100vh - 120px); overflow: auto; }
 
 /* splitters */
@@ -290,6 +290,13 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
 .extline.hr::after { content: ""; position: absolute; right: -1px; top: 0; border-left: 9px solid var(--ecol); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
 .extline.hl::after { content: ""; position: absolute; left: -1px; top: 0; border-right: 9px solid var(--ecol); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
 .extlbl { position: absolute; left: 50%; top: 0; transform: translateX(-50%); background: var(--panel); padding: 0 6px; font: 600 9.5px/12px var(--font); color: var(--muted); white-space: nowrap; }
+
+#aaTip { display: none; z-index: 91; max-width: 300px; min-width: 230px; }
+#aaTip .th small { font-weight: 500; color: var(--muted); margin-left: 4px; }
+#aaTip .aachip { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: #fff; font: 700 13px/22px var(--mono); text-align: center; font-style: normal; margin-right: 0; }
+.aahl { position: absolute; top: 0; bottom: 0; background: rgba(229,50,45,.3); box-shadow: inset 0 0 0 1.5px #e5322d; border-radius: 2px; pointer-events: none; }
+.fbar i[data-p] { cursor: help; }
+.fbar i[data-p]:hover { background: rgba(255,255,255,.35); border-radius: 3px; }
 
 </style>
 </head>
@@ -362,7 +369,7 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
   <footer id="status"><span id="stLeft"></span><span id="stRight"></span></footer>
 </div>
 <div id="dropHint">Drop file to open</div>
-<div id="tip"></div><div id="posTip"></div>
+<div id="tip"></div><div id="aaTip"></div><div id="posTip"></div>
 <div id="modalRoot"></div><div id="menuRoot"></div><div id="toasts"></div>
 <script>
 'use strict';
@@ -486,6 +493,13 @@ function assignLanes(items, gap = 0) {
   }
   return { lane: out, count: lanes.length };
 }
+
+const AA_INFO = {
+  A: ['Alanine', 'Ala'], R: ['Arginine', 'Arg'], N: ['Asparagine', 'Asn'], D: ['Aspartic acid', 'Asp'], C: ['Cysteine', 'Cys'], Q: ['Glutamine', 'Gln'],
+  E: ['Glutamic acid', 'Glu'], G: ['Glycine', 'Gly'], H: ['Histidine', 'His'], I: ['Isoleucine', 'Ile'], L: ['Leucine', 'Leu'], K: ['Lysine', 'Lys'],
+  M: ['Methionine', 'Met'], F: ['Phenylalanine', 'Phe'], P: ['Proline', 'Pro'], S: ['Serine', 'Ser'], T: ['Threonine', 'Thr'], W: ['Tryptophan', 'Trp'],
+  Y: ['Tyrosine', 'Tyr'], V: ['Valine', 'Val'], '*': ['Stop codon', 'Stop'], X: ['Unknown (ambiguous codon)', 'Xaa'],
+};
 
 </script>
 <script>
@@ -2139,8 +2153,9 @@ function renderSeq(doc, force) {
         const cod = cdsCodons(doc, f), off = f.aaOffset || 0, parts = [];
         cod.forEach((c, i) => {
           const m = c.pos[1]; if (m < o.x || m >= o.y) return;
-          parts.push(`<i style="left:${f2((m - o.x) * cw)}px;width:${f2(cw)}px">${c.aa}</i>`);
-          const num = off + i + 1; if (num === 1 || num % 10 === 0) nums += `<b style="left:${f2((m - o.x) * cw - 14)}px;width:${f2(cw + 28)}px">${num}</b>`;
+          const num = off + i + 1;
+          parts.push(`<i data-p="${c.pos.join(',')}" data-a="${c.aa}" data-n="${num}" style="left:${f2((m - o.x) * cw)}px;width:${f2(cw)}px">${c.aa}</i>`);
+          if (num === 1 || num % 10 === 0) nums += `<b style="left:${f2((m - o.x) * cw - 14)}px;width:${f2(cw + 28)}px">${num}</b>`;
         });
         inner = parts.join('');
         b.push(`<div class="fnum" style="left:${f2(left)}px;top:${top}px;width:${f2(w)}px">${nums}</div>`);
@@ -2256,6 +2271,17 @@ function updateMiniWindow(doc) {
 function scrollSeqToPos(p) {
   const sc = $('#seqScroll'), r = seqRowOfPos(clamp(p, 0, Math.max(0, App.cur.seq.length - 1)));
   sc.scrollTop = Math.max(0, SV.tops[r] - sc.clientHeight / 2 + (SV.rows[r] ? SV.rows[r].offsetHeight / 2 : 0));
+}
+
+
+/* ---------- codon highlight (hovering an amino acid) ---------- */
+function clearCodonHighlight() { $$('#seqRows .aahl').forEach(x => x.remove()); }
+function highlightCodon(positions) {
+  clearCodonHighlight();
+  for (const p of positions) {
+    const r = Math.floor(p / SV.bpr), row = SV.rows[r]; if (!row) continue;
+    row.querySelector('.selLayer').insertAdjacentHTML('beforeend', `<div class="aahl" style="left:${f2((p - r * SV.bpr) * SV.cw)}px;width:${f2(SV.cw)}px"></div>`);
+  }
 }
 
 </script>
@@ -2873,7 +2899,8 @@ function wireHover() {
   document.addEventListener('mouseover', e => {
     const doc = App.cur; if (!doc || !e.target.closest) { hide(); return; }
     last = e;
-    const fe = e.target.closest('#viewport [data-fid]'), ee = !fe && e.target.closest('[data-enz]');
+    const onAA = e.target.closest('i[data-p]');   // residue letters have their own pop-up
+    const fe = !onAA && e.target.closest('#viewport [data-fid]'), ee = !fe && !onAA && e.target.closest('[data-enz]');
     if (!fe && !ee) { if (cur !== null) hide(); return; }
     const key = fe ? 'f' + fe.dataset.fid : 'e' + (ee.dataset.ek || ee.dataset.enz);
     if (key === cur) return;
@@ -2894,6 +2921,39 @@ function wireHover() {
     }, HOVER_DELAY);
   });
   document.addEventListener('mousemove', e => { last = e; if (cur !== null && tip.style.display === 'block') move(e); });
+  document.addEventListener('mouseleave', hide);
+  document.addEventListener('mousedown', hide, true);
+}
+
+/* ===== amino acid hover: full name, position in the peptide, codon highlight ===== */
+function wireAA() {
+  const tip = $('#aaTip'); let cur = null;
+  const hide = () => { cur = null; tip.style.display = 'none'; clearCodonHighlight(); };
+  const fmtPos = pos => { const a = pos.slice().sort((x, y) => x - y); return a[2] - a[0] === 2 ? `${(a[0] + 1).toLocaleString('en-US')}–${(a[2] + 1).toLocaleString('en-US')}` : a.map(p => (p + 1).toLocaleString('en-US')).join(', '); };
+  const move = e => {
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.max(4, Math.min(e.clientX + 16, innerWidth - r.width - 8)) + 'px';
+    tip.style.top = Math.max(4, Math.min(e.clientY + 20, innerHeight - r.height - 8)) + 'px';
+  };
+  document.addEventListener('mouseover', e => {
+    const i = e.target.closest && e.target.closest('#seqRows .fbar i[data-p]'), doc = App.cur;
+    if (!i || !doc) { if (cur) hide(); return; }
+    if (i === cur) return;
+    hide(); cur = i;
+    const bar = i.closest('.fbar'), f = featureById(doc, bar.dataset.fid); if (!f) return;
+    const pos = i.dataset.p.split(',').map(Number), aa = i.dataset.a, num = +i.dataset.n, info = AA_INFO[aa] || [aa, aa];
+    const codon = pos.map(p => (f.strand === -1 ? COMP[doc.seq[p]] || 'N' : doc.seq[p])).join('');
+    const cod = cdsCodons(doc, f), total = cod.length - (cod.length && cod[cod.length - 1].aa === '*' ? 1 : 0);
+    const isExt = bar.classList.contains('ext');
+    const row = (k, v) => `<div class="tr"><span>${k}</span><b>${v}</b></div>`;
+    tip.innerHTML = `<div class="th"><i class="aachip">${esc(aa)}</i>${esc(info[0])}${aa === '*' ? '' : ` <small>${info[1]} · ${aa}</small>`}</div>`
+      + row('Position in peptide', aa === '*' ? `${num} (stop)` : isExt ? `${num} (continuation)` : `${num} of ${total}`)
+      + row('Codon', `<code>${esc(codon)}</code>`)
+      + row('Nucleotides', fmtPos(pos) + (f.strand === -1 ? ' (reverse strand)' : ''))
+      + row(isExt ? 'Frame of' : 'In', esc(f.name));
+    tip.style.display = 'block'; highlightCodon(pos); move(e);
+  });
+  document.addEventListener('mousemove', e => { if (cur) move(e); });
   document.addEventListener('mouseleave', hide);
   document.addEventListener('mousedown', hide, true);
 }
@@ -2965,7 +3025,7 @@ function init() {
   const find = $('#find');
   find.addEventListener('input', debounce(() => { if (App.cur) { UI.find = { q: find.value, res: findAll(App.cur, find.value), idx: -1 }; requestUpdate(false); } }, 150));
   find.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runFind(e.shiftKey ? -1 : 1); } else if (e.key === 'Escape') { find.blur(); } });
-  applyLayout(); wireMap(); wireSeq(); wireKeys(); wireHover(); wirePos(); wireSplit(); wireMini();
+  applyLayout(); wireMap(); wireSeq(); wireKeys(); wireHover(); wirePos(); wireAA(); wireSplit(); wireMini();
   new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)).observe($('#viewport'));
   { const ro = new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)); ro.observe($('#mapPane')); ro.observe($('#seqPane')); }
   // drag & drop

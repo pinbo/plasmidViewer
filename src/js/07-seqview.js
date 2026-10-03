@@ -103,8 +103,9 @@ function renderSeq(doc, force) {
         const cod = cdsCodons(doc, f), off = f.aaOffset || 0, parts = [];
         cod.forEach((c, i) => {
           const m = c.pos[1]; if (m < o.x || m >= o.y) return;
-          parts.push(`<i style="left:${f2((m - o.x) * cw)}px;width:${f2(cw)}px">${c.aa}</i>`);
-          const num = off + i + 1; if (num === 1 || num % 10 === 0) nums += `<b style="left:${f2((m - o.x) * cw - 14)}px;width:${f2(cw + 28)}px">${num}</b>`;
+          const num = off + i + 1;
+          parts.push(`<i data-p="${c.pos.join(',')}" data-a="${c.aa}" data-n="${num}" style="left:${f2((m - o.x) * cw)}px;width:${f2(cw)}px">${c.aa}</i>`);
+          if (num === 1 || num % 10 === 0) nums += `<b style="left:${f2((m - o.x) * cw - 14)}px;width:${f2(cw + 28)}px">${num}</b>`;
         });
         inner = parts.join('');
         b.push(`<div class="fnum" style="left:${f2(left)}px;top:${top}px;width:${f2(w)}px">${nums}</div>`);
@@ -220,4 +221,15 @@ function updateMiniWindow(doc) {
 function scrollSeqToPos(p) {
   const sc = $('#seqScroll'), r = seqRowOfPos(clamp(p, 0, Math.max(0, App.cur.seq.length - 1)));
   sc.scrollTop = Math.max(0, SV.tops[r] - sc.clientHeight / 2 + (SV.rows[r] ? SV.rows[r].offsetHeight / 2 : 0));
+}
+
+
+/* ---------- codon highlight (hovering an amino acid) ---------- */
+function clearCodonHighlight() { $$('#seqRows .aahl').forEach(x => x.remove()); }
+function highlightCodon(positions) {
+  clearCodonHighlight();
+  for (const p of positions) {
+    const r = Math.floor(p / SV.bpr), row = SV.rows[r]; if (!row) continue;
+    row.querySelector('.selLayer').insertAdjacentHTML('beforeend', `<div class="aahl" style="left:${f2((p - r * SV.bpr) * SV.cw)}px;width:${f2(SV.cw)}px"></div>`);
+  }
 }

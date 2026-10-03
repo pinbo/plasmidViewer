@@ -611,7 +611,8 @@ function wireHover() {
   document.addEventListener('mouseover', e => {
     const doc = App.cur; if (!doc || !e.target.closest) { hide(); return; }
     last = e;
-    const fe = e.target.closest('#viewport [data-fid]'), ee = !fe && e.target.closest('[data-enz]');
+    const onAA = e.target.closest('i[data-p]');   // residue letters have their own pop-up
+    const fe = !onAA && e.target.closest('#viewport [data-fid]'), ee = !fe && !onAA && e.target.closest('[data-enz]');
     if (!fe && !ee) { if (cur !== null) hide(); return; }
     const key = fe ? 'f' + fe.dataset.fid : 'e' + (ee.dataset.ek || ee.dataset.enz);
     if (key === cur) return;
@@ -632,6 +633,39 @@ function wireHover() {
     }, HOVER_DELAY);
   });
   document.addEventListener('mousemove', e => { last = e; if (cur !== null && tip.style.display === 'block') move(e); });
+  document.addEventListener('mouseleave', hide);
+  document.addEventListener('mousedown', hide, true);
+}
+
+/* ===== amino acid hover: full name, position in the peptide, codon highlight ===== */
+function wireAA() {
+  const tip = $('#aaTip'); let cur = null;
+  const hide = () => { cur = null; tip.style.display = 'none'; clearCodonHighlight(); };
+  const fmtPos = pos => { const a = pos.slice().sort((x, y) => x - y); return a[2] - a[0] === 2 ? `${(a[0] + 1).toLocaleString('en-US')}–${(a[2] + 1).toLocaleString('en-US')}` : a.map(p => (p + 1).toLocaleString('en-US')).join(', '); };
+  const move = e => {
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.max(4, Math.min(e.clientX + 16, innerWidth - r.width - 8)) + 'px';
+    tip.style.top = Math.max(4, Math.min(e.clientY + 20, innerHeight - r.height - 8)) + 'px';
+  };
+  document.addEventListener('mouseover', e => {
+    const i = e.target.closest && e.target.closest('#seqRows .fbar i[data-p]'), doc = App.cur;
+    if (!i || !doc) { if (cur) hide(); return; }
+    if (i === cur) return;
+    hide(); cur = i;
+    const bar = i.closest('.fbar'), f = featureById(doc, bar.dataset.fid); if (!f) return;
+    const pos = i.dataset.p.split(',').map(Number), aa = i.dataset.a, num = +i.dataset.n, info = AA_INFO[aa] || [aa, aa];
+    const codon = pos.map(p => (f.strand === -1 ? COMP[doc.seq[p]] || 'N' : doc.seq[p])).join('');
+    const cod = cdsCodons(doc, f), total = cod.length - (cod.length && cod[cod.length - 1].aa === '*' ? 1 : 0);
+    const isExt = bar.classList.contains('ext');
+    const row = (k, v) => `<div class="tr"><span>${k}</span><b>${v}</b></div>`;
+    tip.innerHTML = `<div class="th"><i class="aachip">${esc(aa)}</i>${esc(info[0])}${aa === '*' ? '' : ` <small>${info[1]} · ${aa}</small>`}</div>`
+      + row('Position in peptide', aa === '*' ? `${num} (stop)` : isExt ? `${num} (continuation)` : `${num} of ${total}`)
+      + row('Codon', `<code>${esc(codon)}</code>`)
+      + row('Nucleotides', fmtPos(pos) + (f.strand === -1 ? ' (reverse strand)' : ''))
+      + row(isExt ? 'Frame of' : 'In', esc(f.name));
+    tip.style.display = 'block'; highlightCodon(pos); move(e);
+  });
+  document.addEventListener('mousemove', e => { if (cur) move(e); });
   document.addEventListener('mouseleave', hide);
   document.addEventListener('mousedown', hide, true);
 }
@@ -703,7 +737,7 @@ function init() {
   const find = $('#find');
   find.addEventListener('input', debounce(() => { if (App.cur) { UI.find = { q: find.value, res: findAll(App.cur, find.value), idx: -1 }; requestUpdate(false); } }, 150));
   find.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runFind(e.shiftKey ? -1 : 1); } else if (e.key === 'Escape') { find.blur(); } });
-  applyLayout(); wireMap(); wireSeq(); wireKeys(); wireHover(); wirePos(); wireSplit(); wireMini();
+  applyLayout(); wireMap(); wireSeq(); wireKeys(); wireHover(); wirePos(); wireAA(); wireSplit(); wireMini();
   new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)).observe($('#viewport'));
   { const ro = new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)); ro.observe($('#mapPane')); ro.observe($('#seqPane')); }
   // drag & drop
