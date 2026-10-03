@@ -59,6 +59,7 @@ function renderStatus(doc) {
   } else left = `Cursor after base ${doc.caret.toLocaleString('en-US')}`;
   if (UI.find.q) { const h = UI.find.res[UI.find.idx]; left += ` · Find: ${UI.find.res.length ? `${UI.find.idx >= 0 ? UI.find.idx + 1 : '–'} of ${UI.find.res.length}` : 'no matches'}${h ? (h.strand === 1 ? ' · forward strand (top)' : ' · reverse strand (bottom)') : ''}`; }
   $('#stLeft').textContent = left;
+  const bad = badBases(doc).length, w = $('#stWarn'); w.hidden = !bad; if (bad) w.textContent = `⚠ ${bad.toLocaleString('en-US')} non-ATGC`;
   $('#stRight').textContent = `${doc.circular ? 'Circular' : 'Linear'} · ${fmtBp(n)} · ${doc.features.length} features · GC ${gcPercent(doc.seq).toFixed(1)}%`;
 }
 
@@ -268,7 +269,7 @@ function openFeatureDialog(doc, f) {
       const quals = { ...(f ? f.quals : {}) }; const nt = note.value.trim(); if (nt) quals.note = nt.split('\n'); else delete quals.note;
       const data = { name: name.value.trim(), type: type.value, strand: +strand.value, color: color.value, locs, quals };
       if (lib.checked) {
-        let s = locs.map(([a, b]) => doc.seq.slice(a, b)).join(''); if (data.strand === -1) s = revcomp(s);
+        let s = locs.map(([a, b]) => doc.seq.slice(a, b)).join(''); if (data.strand === -1) s = revcomp(s); s = s.toUpperCase();
         if (s.length < 6) toast('Too short for the library (min 6 bp)');
         else { const u = userLibrary().filter(x => x.name.toLowerCase() !== data.name.toLowerCase()); u.push({ name: data.name, type: data.type, color: data.color, seq: s, dir: data.strand !== 0 }); saveUserLibrary(u); toast(`“${data.name}” added to the feature library`); }
       }
@@ -326,7 +327,7 @@ function openDetectDialog(doc) {
 /* ----- add this plasmid's features to the feature library ----- */
 function featureSequence(doc, f) {
   const cat = f.locs.map(([a, b]) => doc.seq.slice(a, b)).join('');
-  return f.strand === -1 ? revcomp(cat) : cat;
+  return (f.strand === -1 ? revcomp(cat) : cat).toUpperCase();   // library sequences are stored upper-case
 }
 function openAddToLibraryDialog(doc) {
   const lib = fullLibrary(), byName = new Map(lib.map(l => [l.name.toLowerCase(), l]));
@@ -373,13 +374,20 @@ function openAddToLibraryDialog(doc) {
   } }], { wide: true });
 }
 
+/* live warning line under a sequence textarea */
+function liveWarn(ta) {
+  const line = el('div', { class: 'warnline' });
+  const upd = () => { const st = nonATGCStats(cleanSeq(ta.value)); line.textContent = st.count ? `⚠ ${st.count.toLocaleString('en-US')} non-ATGC character${st.count > 1 ? 's' : ''} (${st.detail}) – they will be kept and highlighted in red` : ''; line.style.display = st.count ? 'block' : 'none'; };
+  ta.addEventListener('input', upd); upd(); return line;
+}
+
 function openInsertDialog(doc) {
   if (!App.editing) return lockedToast();
   const pos = el('input', { type: 'number', min: 0, max: doc.seq.length, value: selRange(doc) ? selRange(doc)[0] : doc.caret });
   const ta = el('textarea', { rows: 6, class: 'mono', placeholder: 'Paste or type DNA (FASTA allowed)…' });
   const rc = el('input', { type: 'checkbox' });
-  openModal('Insert sequence', el('div', { class: 'form' }, field('Insert after base', pos, '0 = at the very start'), field('Sequence', ta), el('label', { class: 'chk' }, rc, 'Insert reverse complement')),
-    [{ label: 'Cancel' }, { label: 'Insert', primary: true, action: () => { let s = cleanSeq(ta.value); if (!s) { toast('No valid DNA found'); return false; } if (rc.checked) s = revcomp(s); const p = clamp(+pos.value || 0, 0, doc.seq.length); editReplace(doc, p, p, s); } }]);
+  openModal('Insert sequence', el('div', { class: 'form' }, field('Insert after base', pos, '0 = at the very start'), field('Sequence', ta), liveWarn(ta), el('label', { class: 'chk' }, rc, 'Insert reverse complement')),
+    [{ label: 'Cancel' }, { label: 'Insert', primary: true, action: () => { let s = cleanSeq(ta.value); if (!s) { toast('No valid DNA found'); return false; } if (rc.checked) s = revcomp(s); const p = clamp(+pos.value || 0, 0, doc.seq.length); warnNonATGC(s, 'in the inserted sequence'); editReplace(doc, p, p, s); } }]);
 }
 
 function openGotoDialog(doc) {
@@ -393,12 +401,12 @@ function openGotoDialog(doc) {
 function openNewSeqDialog() {
   const name = el('input', { value: 'New plasmid' }), ta = el('textarea', { rows: 8, class: 'mono', placeholder: 'Paste DNA sequence (raw, FASTA or GenBank text)…' });
   const topo = el('select', {}, el('option', { value: 'c' }, 'Circular'), el('option', { value: 'l' }, 'Linear'));
-  openModal('New from sequence', el('div', { class: 'form' }, field('Name', name), field('Topology', topo), field('Sequence', ta)), [{ label: 'Cancel' }, { label: 'Create', primary: true, action: () => {
+  openModal('New from sequence', el('div', { class: 'form' }, field('Name', name), field('Topology', topo), field('Sequence', ta), liveWarn(ta)), [{ label: 'Cancel' }, { label: 'Create', primary: true, action: () => {
     try {
       let d;
       if (/^LOCUS/m.test(ta.value)) d = parseGenBank(ta.value); else d = { name: name.value.trim() || 'New plasmid', seq: cleanSeq(ta.value), circular: topo.value === 'c', features: [], meta: {} };
       if (!d.seq) { toast('No valid DNA found'); return false; }
-      addDoc(d, { detect: true });
+      addDoc(d, { detect: true }); warnNonATGC(d.seq, 'in this sequence');
     } catch (e) { toast(e.message); return false; }
   } }]);
 }
@@ -434,7 +442,7 @@ function openLibraryDialog() {
       el('div', { class: 'btnrow' }, el('button', { class: 'btn primary', onclick: () => {
         if (!name.value.trim()) return toast('Name required');
         const e = { name: name.value.trim(), type: type.value, color: color.value };
-        if (kind.value === 'dna') { e.seq = cleanSeq(seq.value); if (e.seq.length < 6) return toast('Need at least 6 bp'); } else { e.aa = seq.value.toUpperCase().replace(/[^A-Z]/g, ''); if (e.aa.length < 3) return toast('Need at least 3 residues'); }
+        if (kind.value === 'dna') { e.seq = cleanSeq(seq.value).toUpperCase(); if (e.seq.length < 6) return toast('Need at least 6 bp'); } else { e.aa = seq.value.toUpperCase().replace(/[^A-Z]/g, ''); if (e.aa.length < 3) return toast('Need at least 3 residues'); }
         saveUserLibrary(userLibrary().filter(x => x.name.toLowerCase() !== e.name.toLowerCase()).concat([e])); render(); toast('Added to library');
       } }, 'Add to library'),
       el('button', { class: 'btn', onclick: () => { if (App.cur) openAddToLibraryDialog(App.cur); else toast('Open a plasmid first'); } }, 'Add this plasmid’s features…'),
@@ -471,7 +479,7 @@ async function openFiles(files) {
     try {
       const buf = await file.arrayBuffer();
       const d = parseAny(buf, file.name);
-      const doc = addDoc(d, { detect: true });
+      const doc = addDoc(d, { detect: true }); warnNonATGC(doc.seq, `in ${file.name}`);
       if (doc.features.length && !d.features.length) doc.dirty = false;
     } catch (e) { toast(`${file.name}: ${e.message}`, 5000); }
   }
@@ -641,7 +649,7 @@ function wireKeys() {
       case 'Backspace': e.preventDefault(); deleteSelection(doc, false); return;
       case 'Delete': e.preventDefault(); deleteSelection(doc, true); return;
     }
-    if (seqFocus && /^[a-zA-Z]$/.test(k) && /[ACGTUNRYKMSWBDHV]/i.test(k)) { e.preventDefault(); if (!App.editing) return lockedToast(); typeBases(doc, k); }
+    if (seqFocus && /^[a-zA-Z]$/.test(k) && /[ACGTUNRYKMSWBDHV]/i.test(k)) { e.preventDefault(); if (!App.editing) return lockedToast(); if (!/[ACGTacgt]/.test(k)) toast(`⚠ “${k}” is not A/C/G/T – it will be highlighted in red`, 3500, 'warn'); typeBases(doc, k); }
   });
   document.addEventListener('copy', e => { clearTimeout(clipTimer); const doc = App.cur; if (!doc || inTextField(e.target)) return; const clip = currentClip(doc); if (!clip) return; e.preventDefault(); e.clipboardData.setData('text/plain', clip.text); storeClip(clip); toast(`Copied ${fmtBp(clip.text.length)}${clip.features.length ? ` + ${clip.features.length} feature(s)` : ''}`); });
   document.addEventListener('cut', e => { clearTimeout(clipTimer); const doc = App.cur; if (!doc || inTextField(e.target)) return; const clip = currentClip(doc); if (!clip) return; e.preventDefault(); e.clipboardData.setData('text/plain', clip.text); storeClip(clip); deleteSelection(doc); toast(`Cut ${fmtBp(clip.text.length)}`); });
@@ -717,7 +725,7 @@ function wireAA() {
     hide(); cur = i;
     const bar = i.closest('.fbar'), f = featureById(doc, bar.dataset.fid); if (!f) return;
     const pos = i.dataset.p.split(',').map(Number), aa = i.dataset.a, num = +i.dataset.n, info = AA_INFO[aa] || [aa, aa];
-    const codon = pos.map(p => (f.strand === -1 ? COMP[doc.seq[p]] || 'N' : doc.seq[p])).join('');
+    const codon = pos.map(p => (f.strand === -1 ? compChar(doc.seq[p]) : doc.seq[p])).join('').toUpperCase();
     const cod = cdsCodons(doc, f), total = cod.length - (cod.length && cod[cod.length - 1].aa === '*' ? 1 : 0);
     const isExt = bar.classList.contains('ext');
     const row = (k, v) => `<div class="tr"><span>${k}</span><b>${v}</b></div>`;
@@ -779,6 +787,12 @@ function wireSplit() {
   drag($('#splitMS'), ev => { const vp = $('#viewport').getBoundingClientRect(); S.mapW = Math.round(clamp(ev.clientX - vp.left, 200, vp.width - 260)); }, () => { S.mapW = 0; });
   drag($('#splitSide'), ev => { const r = main.getBoundingClientRect(); S.sideW = Math.round(clamp(r.right - ev.clientX, 220, Math.min(720, r.width - 320))); }, () => { S.sideW = 0; });
 }
+function jumpToBad() {
+  const doc = App.cur; if (!doc) return; const bad = badBases(doc); if (!bad.length) return;
+  const from = selRange(doc) ? selRange(doc)[1] - 1 : doc.caret - 1;
+  const p = bad.find(x => x > from) ?? bad[0];
+  setSel(doc, p, p + 1);
+}
 function wireMini() {
   const host = $('#miniMap'); let down = false;
   const go = e => { const svg = host.querySelector('svg'); if (!svg || !App.cur) return; const r = svg.getBoundingClientRect(); const p = (e.clientX - r.left - MINI.M) / (r.width - 2 * MINI.M) * MINI.n; scrollSeqToPos(clamp(Math.round(p), 0, MINI.n)); };
@@ -800,6 +814,7 @@ function init() {
   const find = $('#find');
   find.addEventListener('input', debounce(() => { if (App.cur) { UI.find = { q: find.value, res: findAll(App.cur, find.value), idx: -1 }; requestUpdate(false); } }, 150));
   find.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runFind(e.shiftKey ? -1 : 1); } else if (e.key === 'Escape') { find.blur(); } });
+  $('#stWarn').addEventListener('click', jumpToBad);
   applyLayout(); wireMap(); wireSeq(); wireKeys(); wireHover(); wirePos(); wireAA(); wireSplit(); wireMini();
   new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)).observe($('#viewport'));
   { const ro = new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)); ro.observe($('#mapPane')); ro.observe($('#seqPane')); }

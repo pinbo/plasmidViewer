@@ -37,25 +37,39 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 
 /* ---------- sequence helpers ---------- */
 const COMP = { A: 'T', T: 'A', G: 'C', C: 'G', U: 'A', R: 'Y', Y: 'R', K: 'M', M: 'K', S: 'S', W: 'W', B: 'V', V: 'B', D: 'H', H: 'D', N: 'N' };
-function revcomp(s) { let o = ''; for (let i = s.length - 1; i >= 0; i--) o += COMP[s[i]] || 'N'; return o; }
-function complement(s) { let o = ''; for (let i = 0; i < s.length; i++) o += COMP[s[i]] || 'N'; return o; }
+/* complement of one base; keeps the case of the input (a → t, A → T); unknown letters become N/n */
+function compChar(c) {
+  const u = COMP[c]; if (u) return u;
+  const l = COMP[c.toUpperCase()];
+  return l ? l.toLowerCase() : (c === c.toLowerCase() ? 'n' : 'N');
+}
+function revcomp(s) { let o = ''; for (let i = s.length - 1; i >= 0; i--) o += compChar(s[i]); return o; }
+function complement(s) { let o = ''; for (let i = 0; i < s.length; i++) o += compChar(s[i]); return o; }
 const IUPAC = { A: 'A', C: 'C', G: 'G', T: 'T', U: 'T', R: 'AG', Y: 'CT', S: 'CG', W: 'AT', K: 'GT', M: 'AC', B: 'CGT', D: 'AGT', H: 'ACT', V: 'ACG', N: 'ACGTN' };
 const iupacRegexSrc = site => site.split('').map(c => '[' + (IUPAC[c] || c) + ']').join('');
+/* Keeps letters only (FASTA headers, digits, spaces dropped) and PRESERVES CASE; RNA U/u becomes T/t.
+   Letters other than A/C/G/T are kept so they can be flagged and highlighted – see nonATGCStats(). */
 function cleanSeq(text) {
-  return String(text).replace(/^>.*$/gm, '').replace(/[^A-Za-z]/g, '').toUpperCase().replace(/U/g, 'T').replace(/[^ACGTRYKMSWBDHVN]/g, '');
+  return String(text).replace(/^>.*$/gm, '').replace(/[^A-Za-z]/g, '').replace(/U/g, 'T').replace(/u/g, 't');
+}
+function nonATGCStats(s) {
+  const m = String(s).match(/[^ACGTacgt]/g) || [], c = {};
+  for (const ch of m) c[ch.toUpperCase()] = (c[ch.toUpperCase()] || 0) + 1;
+  const detail = Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k}×${v}`).join(', ');
+  return { count: m.length, detail };
 }
 
 const CODON_AA = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
 const CIDX = { T: 0, C: 1, A: 2, G: 3 };
 function codonToAA(c) {
-  const a = CIDX[c[0]], b = CIDX[c[1]], d = CIDX[c[2]];
+  const a = CIDX[c[0].toUpperCase()], b = CIDX[c[1].toUpperCase()], d = CIDX[c[2].toUpperCase()];
   return (a === undefined || b === undefined || d === undefined) ? 'X' : CODON_AA[a * 16 + b * 4 + d];
 }
 function translate(s) { let o = ''; for (let i = 0; i + 2 < s.length; i += 3) o += codonToAA(s.substr(i, 3)); return o; }
 
-function gcPercent(s) { if (!s.length) return 0; let g = 0; for (const c of s) if (c === 'G' || c === 'C') g++; return 100 * g / s.length; }
+function gcPercent(s) { if (!s.length) return 0; let g = 0; for (const c of s) if (c === 'G' || c === 'C' || c === 'g' || c === 'c') g++; return 100 * g / s.length; }
 function meltingTemp(s) {
-  const n = s.length; if (!n) return 0;
+  s = s.toUpperCase(); const n = s.length; if (!n) return 0;
   let gc = 0, at = 0; for (const c of s) { if (c === 'G' || c === 'C') gc++; else if (c === 'A' || c === 'T') at++; }
   if (n < 14) return 2 * at + 4 * gc;
   return 64.9 + 41 * (gc - 16.4) / n;
@@ -91,8 +105,8 @@ function niceStep(n, target = 10) {
 }
 function fmtBp(n) { return n.toLocaleString('en-US') + ' bp'; }
 
-function toast(msg, ms = 2600) {
-  const t = el('div', { class: 'toast' }, msg);
+function toast(msg, ms = 2600, kind = '') {
+  const t = el('div', { class: 'toast ' + kind }, msg);
   $('#toasts').append(t);
   setTimeout(() => t.classList.add('out'), ms);
   setTimeout(() => t.remove(), ms + 400);

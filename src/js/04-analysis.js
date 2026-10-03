@@ -1,11 +1,24 @@
 'use strict';
 /* ---------- restriction-site search, feature detection, ORFs, find ---------- */
 
+/* upper-case copy of the sequence for all analyses (doc.seq itself keeps the user's case) */
+function seqU(doc) {
+  const c = doc._cache;
+  if (c.Uf !== doc.seq) { c.U = doc.seq.toUpperCase(); c.Uf = doc.seq; }
+  return c.U;
+}
+/* positions of characters that are not A/C/G/T (either case) */
+function badBases(doc) {
+  const c = doc._cache;
+  if (!c.bad) { c.bad = []; for (const m of doc.seq.matchAll(/[^ACGTacgt]/g)) c.bad.push(m.index); }
+  return c.bad;
+}
+
 /* returns Map name -> {enzyme, cuts:[{top, bot, s, e, strand}]}  (positions are 0-based boundaries) */
 function analyzeEnzymes(doc) {
   const c = doc._cache;
   if (c.enz && c.enzV === enzVersion) return c.enz;
-  const seq = doc.seq, n = seq.length, res = new Map();
+  const seq = seqU(doc), n = seq.length, res = new Map();
   for (const e of ENZYMES) {
     const ext = doc.circular ? seq + seq.slice(0, e.len - 1) : seq;
     const cuts = [];
@@ -62,7 +75,7 @@ const locsOverlap = (a, b) => a.some(([x, y]) => b.some(([p, q]) => x < q && p <
 /* All library matches with >= thr identity (mismatch-only alignment, both strands; protein motifs in all 6 frames).
    Each hit: {entry, locs, strand, mis, len, identity (0-1), present (an annotation with the same name already overlaps)} */
 function detectCandidates(doc, lib, thr = 0.96) {
-  const seq = doc.seq, n = seq.length, found = [];
+  const seq = seqU(doc), n = seq.length, found = [];
   for (const entry of lib) {
     if (entry.seq) {
       const pat = entry.seq.toUpperCase(), L = pat.length;
@@ -115,7 +128,7 @@ function detectFeatures(doc, lib, thr = App.settings.detectThr) {
 function findORFs(doc, minAA) {
   const c = doc._cache; const key = 'orf' + minAA;
   if (c[key]) return c[key];
-  const seq = doc.seq, n = seq.length, out = [];
+  const seq = seqU(doc), n = seq.length, out = [];
   for (const strand of [1, -1]) {
     const t = strand === 1 ? seq : revcomp(seq);
     for (let f = 0; f < 3; f++) {
@@ -138,8 +151,8 @@ function findORFs(doc, minAA) {
 
 /* ---------- find ---------- */
 function findAll(doc, query) {
-  const q = cleanSeq(query); if (!q) return [];
-  const n = doc.seq.length, ext = doc.circular ? doc.seq + doc.seq.slice(0, q.length - 1) : doc.seq;
+  const q = cleanSeq(query).toUpperCase(); if (!q) return [];
+  const U = seqU(doc), n = U.length, ext = doc.circular ? U + U.slice(0, q.length - 1) : U;
   const res = [], seen = new Set();
   const src = iupacRegexSrc(q), rcSrc = iupacRegexSrc(revcomp(q));
   const run = (re, strand) => { for (const m of ext.matchAll(new RegExp('(?=(' + re + '))', 'g'))) if (m.index < n && !seen.has(m.index + ':' + strand)) { seen.add(m.index + ':' + strand); res.push({ s: m.index, e: Math.min(m.index + q.length, n), strand }); } };
@@ -157,7 +170,8 @@ function cdsCodons(doc, f) {
     if (f.strand === -1) for (let i = b - 1; i >= a; i--) pos.push(i); else for (let i = a; i < b; i++) pos.push(i);
   }
   let bases = '';
-  for (const p of pos) bases += f.strand === -1 ? (COMP[doc.seq[p]] || 'N') : doc.seq[p];
+  const U = seqU(doc);
+  for (const p of pos) bases += f.strand === -1 ? (COMP[U[p]] || 'N') : U[p];
   const out = [];
   for (let i = 0; i + 2 < pos.length; i += 3) out.push({ aa: codonToAA(bases.substr(i, 3)), pos: [pos[i], pos[i + 1], pos[i + 2]] });
   doc._cache[key] = out; return out;
@@ -172,7 +186,7 @@ function cdsExtension(doc, f) {
   let res = null;
   const cod = cdsCodons(doc, f), total = f.locs.reduce((s, l) => s + l[1] - l[0], 0);
   if (cod.length && total % 3 === 0 && cod[cod.length - 1].aa !== '*') {
-    const n = doc.seq.length, dir = f.strand === -1 ? -1 : 1, limit = Math.min(n - total, 30000);
+    const n = doc.seq.length, U = seqU(doc), dir = f.strand === -1 ? -1 : 1, limit = Math.min(n - total, 30000);
     let p = cod[cod.length - 1].pos[2], stopped = false;
     const pos = [];
     while (pos.length < limit) {
@@ -184,7 +198,7 @@ function cdsExtension(doc, f) {
         trio.push(p);
       }
       if (trio.length < 3) break;
-      const bases = trio.map(q => (dir === -1 ? COMP[doc.seq[q]] || 'N' : doc.seq[q])).join('');
+      const bases = trio.map(q => (dir === -1 ? COMP[U[q]] || 'N' : U[q])).join('');
       pos.push(...trio);
       if (codonToAA(bases) === '*') { stopped = true; break; }
     }

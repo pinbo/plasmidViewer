@@ -302,6 +302,15 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
 .badge.dup { background: rgba(245,166,35,.16); border-color: rgba(245,166,35,.7); color: #b86e00; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #featList .badge { font-size: 10px; font-weight: 600; padding: 1px 7px; flex: none; }
 
+/* non-ATGC characters */
+.badbase { position: absolute; background: rgba(229,72,77,.3); box-shadow: inset 0 2px 0 #e5484d, inset 0 -2px 0 #e5484d; border-radius: 2px; pointer-events: none; }
+.mp-bad { stroke: #e5484d; stroke-width: 2; }
+.warnline { color: #c0392b; background: rgba(229,72,77,.1); border: 1px solid rgba(229,72,77,.4); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; }
+.toast.warn { background: #b3261e; max-width: 80vw; text-align: center; }
+.warnchip { border: 1px solid rgba(229,72,77,.6); background: rgba(229,72,77,.12); color: #c0392b; border-radius: 99px; padding: 0 10px; font: 700 11.5px var(--font); cursor: pointer; }
+.warnchip:hover { background: rgba(229,72,77,.25); }
+.warnchip[hidden] { display: none; }
+
 </style>
 </head>
 <body class="empty">
@@ -370,7 +379,7 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
       <div id="sideBody"></div>
     </aside>
   </main>
-  <footer id="status"><span id="stLeft"></span><span id="stRight"></span></footer>
+  <footer id="status"><span id="stLeft"></span><button id="stWarn" class="warnchip" hidden title="Characters other than A/C/G/T – click to jump to the next one"></button><span id="stRight"></span></footer>
 </div>
 <div id="dropHint">Drop file to open</div>
 <div id="tip"></div><div id="aaTip"></div><div id="posTip"></div>
@@ -415,25 +424,39 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 
 /* ---------- sequence helpers ---------- */
 const COMP = { A: 'T', T: 'A', G: 'C', C: 'G', U: 'A', R: 'Y', Y: 'R', K: 'M', M: 'K', S: 'S', W: 'W', B: 'V', V: 'B', D: 'H', H: 'D', N: 'N' };
-function revcomp(s) { let o = ''; for (let i = s.length - 1; i >= 0; i--) o += COMP[s[i]] || 'N'; return o; }
-function complement(s) { let o = ''; for (let i = 0; i < s.length; i++) o += COMP[s[i]] || 'N'; return o; }
+/* complement of one base; keeps the case of the input (a → t, A → T); unknown letters become N/n */
+function compChar(c) {
+  const u = COMP[c]; if (u) return u;
+  const l = COMP[c.toUpperCase()];
+  return l ? l.toLowerCase() : (c === c.toLowerCase() ? 'n' : 'N');
+}
+function revcomp(s) { let o = ''; for (let i = s.length - 1; i >= 0; i--) o += compChar(s[i]); return o; }
+function complement(s) { let o = ''; for (let i = 0; i < s.length; i++) o += compChar(s[i]); return o; }
 const IUPAC = { A: 'A', C: 'C', G: 'G', T: 'T', U: 'T', R: 'AG', Y: 'CT', S: 'CG', W: 'AT', K: 'GT', M: 'AC', B: 'CGT', D: 'AGT', H: 'ACT', V: 'ACG', N: 'ACGTN' };
 const iupacRegexSrc = site => site.split('').map(c => '[' + (IUPAC[c] || c) + ']').join('');
+/* Keeps letters only (FASTA headers, digits, spaces dropped) and PRESERVES CASE; RNA U/u becomes T/t.
+   Letters other than A/C/G/T are kept so they can be flagged and highlighted – see nonATGCStats(). */
 function cleanSeq(text) {
-  return String(text).replace(/^>.*$/gm, '').replace(/[^A-Za-z]/g, '').toUpperCase().replace(/U/g, 'T').replace(/[^ACGTRYKMSWBDHVN]/g, '');
+  return String(text).replace(/^>.*$/gm, '').replace(/[^A-Za-z]/g, '').replace(/U/g, 'T').replace(/u/g, 't');
+}
+function nonATGCStats(s) {
+  const m = String(s).match(/[^ACGTacgt]/g) || [], c = {};
+  for (const ch of m) c[ch.toUpperCase()] = (c[ch.toUpperCase()] || 0) + 1;
+  const detail = Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k}×${v}`).join(', ');
+  return { count: m.length, detail };
 }
 
 const CODON_AA = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
 const CIDX = { T: 0, C: 1, A: 2, G: 3 };
 function codonToAA(c) {
-  const a = CIDX[c[0]], b = CIDX[c[1]], d = CIDX[c[2]];
+  const a = CIDX[c[0].toUpperCase()], b = CIDX[c[1].toUpperCase()], d = CIDX[c[2].toUpperCase()];
   return (a === undefined || b === undefined || d === undefined) ? 'X' : CODON_AA[a * 16 + b * 4 + d];
 }
 function translate(s) { let o = ''; for (let i = 0; i + 2 < s.length; i += 3) o += codonToAA(s.substr(i, 3)); return o; }
 
-function gcPercent(s) { if (!s.length) return 0; let g = 0; for (const c of s) if (c === 'G' || c === 'C') g++; return 100 * g / s.length; }
+function gcPercent(s) { if (!s.length) return 0; let g = 0; for (const c of s) if (c === 'G' || c === 'C' || c === 'g' || c === 'c') g++; return 100 * g / s.length; }
 function meltingTemp(s) {
-  const n = s.length; if (!n) return 0;
+  s = s.toUpperCase(); const n = s.length; if (!n) return 0;
   let gc = 0, at = 0; for (const c of s) { if (c === 'G' || c === 'C') gc++; else if (c === 'A' || c === 'T') at++; }
   if (n < 14) return 2 * at + 4 * gc;
   return 64.9 + 41 * (gc - 16.4) / n;
@@ -469,8 +492,8 @@ function niceStep(n, target = 10) {
 }
 function fmtBp(n) { return n.toLocaleString('en-US') + ' bp'; }
 
-function toast(msg, ms = 2600) {
-  const t = el('div', { class: 'toast' }, msg);
+function toast(msg, ms = 2600, kind = '') {
+  const t = el('div', { class: 'toast ' + kind }, msg);
   $('#toasts').append(t);
   setTimeout(() => t.classList.add('out'), ms);
   setTimeout(() => t.remove(), ms + 400);
@@ -701,7 +724,7 @@ function writeGenBank(doc) {
   }
   lines.push('ORIGIN');
   for (let i = 0; i < n; i += 60) {
-    const chunk = doc.seq.slice(i, i + 60).toLowerCase().match(/.{1,10}/g).join(' ');
+    const chunk = doc.seq.slice(i, i + 60).match(/.{1,10}/g).join(' ');
     lines.push(String(i + 1).padStart(9) + ' ' + chunk);
   }
   lines.push('//');
@@ -1329,11 +1352,24 @@ function enzymeTipHTML(doc, name) {
 'use strict';
 /* ---------- restriction-site search, feature detection, ORFs, find ---------- */
 
+/* upper-case copy of the sequence for all analyses (doc.seq itself keeps the user's case) */
+function seqU(doc) {
+  const c = doc._cache;
+  if (c.Uf !== doc.seq) { c.U = doc.seq.toUpperCase(); c.Uf = doc.seq; }
+  return c.U;
+}
+/* positions of characters that are not A/C/G/T (either case) */
+function badBases(doc) {
+  const c = doc._cache;
+  if (!c.bad) { c.bad = []; for (const m of doc.seq.matchAll(/[^ACGTacgt]/g)) c.bad.push(m.index); }
+  return c.bad;
+}
+
 /* returns Map name -> {enzyme, cuts:[{top, bot, s, e, strand}]}  (positions are 0-based boundaries) */
 function analyzeEnzymes(doc) {
   const c = doc._cache;
   if (c.enz && c.enzV === enzVersion) return c.enz;
-  const seq = doc.seq, n = seq.length, res = new Map();
+  const seq = seqU(doc), n = seq.length, res = new Map();
   for (const e of ENZYMES) {
     const ext = doc.circular ? seq + seq.slice(0, e.len - 1) : seq;
     const cuts = [];
@@ -1390,7 +1426,7 @@ const locsOverlap = (a, b) => a.some(([x, y]) => b.some(([p, q]) => x < q && p <
 /* All library matches with >= thr identity (mismatch-only alignment, both strands; protein motifs in all 6 frames).
    Each hit: {entry, locs, strand, mis, len, identity (0-1), present (an annotation with the same name already overlaps)} */
 function detectCandidates(doc, lib, thr = 0.96) {
-  const seq = doc.seq, n = seq.length, found = [];
+  const seq = seqU(doc), n = seq.length, found = [];
   for (const entry of lib) {
     if (entry.seq) {
       const pat = entry.seq.toUpperCase(), L = pat.length;
@@ -1443,7 +1479,7 @@ function detectFeatures(doc, lib, thr = App.settings.detectThr) {
 function findORFs(doc, minAA) {
   const c = doc._cache; const key = 'orf' + minAA;
   if (c[key]) return c[key];
-  const seq = doc.seq, n = seq.length, out = [];
+  const seq = seqU(doc), n = seq.length, out = [];
   for (const strand of [1, -1]) {
     const t = strand === 1 ? seq : revcomp(seq);
     for (let f = 0; f < 3; f++) {
@@ -1466,8 +1502,8 @@ function findORFs(doc, minAA) {
 
 /* ---------- find ---------- */
 function findAll(doc, query) {
-  const q = cleanSeq(query); if (!q) return [];
-  const n = doc.seq.length, ext = doc.circular ? doc.seq + doc.seq.slice(0, q.length - 1) : doc.seq;
+  const q = cleanSeq(query).toUpperCase(); if (!q) return [];
+  const U = seqU(doc), n = U.length, ext = doc.circular ? U + U.slice(0, q.length - 1) : U;
   const res = [], seen = new Set();
   const src = iupacRegexSrc(q), rcSrc = iupacRegexSrc(revcomp(q));
   const run = (re, strand) => { for (const m of ext.matchAll(new RegExp('(?=(' + re + '))', 'g'))) if (m.index < n && !seen.has(m.index + ':' + strand)) { seen.add(m.index + ':' + strand); res.push({ s: m.index, e: Math.min(m.index + q.length, n), strand }); } };
@@ -1485,7 +1521,8 @@ function cdsCodons(doc, f) {
     if (f.strand === -1) for (let i = b - 1; i >= a; i--) pos.push(i); else for (let i = a; i < b; i++) pos.push(i);
   }
   let bases = '';
-  for (const p of pos) bases += f.strand === -1 ? (COMP[doc.seq[p]] || 'N') : doc.seq[p];
+  const U = seqU(doc);
+  for (const p of pos) bases += f.strand === -1 ? (COMP[U[p]] || 'N') : U[p];
   const out = [];
   for (let i = 0; i + 2 < pos.length; i += 3) out.push({ aa: codonToAA(bases.substr(i, 3)), pos: [pos[i], pos[i + 1], pos[i + 2]] });
   doc._cache[key] = out; return out;
@@ -1500,7 +1537,7 @@ function cdsExtension(doc, f) {
   let res = null;
   const cod = cdsCodons(doc, f), total = f.locs.reduce((s, l) => s + l[1] - l[0], 0);
   if (cod.length && total % 3 === 0 && cod[cod.length - 1].aa !== '*') {
-    const n = doc.seq.length, dir = f.strand === -1 ? -1 : 1, limit = Math.min(n - total, 30000);
+    const n = doc.seq.length, U = seqU(doc), dir = f.strand === -1 ? -1 : 1, limit = Math.min(n - total, 30000);
     let p = cod[cod.length - 1].pos[2], stopped = false;
     const pos = [];
     while (pos.length < limit) {
@@ -1512,7 +1549,7 @@ function cdsExtension(doc, f) {
         trio.push(p);
       }
       if (trio.length < 3) break;
-      const bases = trio.map(q => (dir === -1 ? COMP[doc.seq[q]] || 'N' : doc.seq[q])).join('');
+      const bases = trio.map(q => (dir === -1 ? COMP[U[q]] || 'N' : U[q])).join('');
       pos.push(...trio);
       if (codonToAA(bases) === '*') { stopped = true; break; }
     }
@@ -1564,7 +1601,6 @@ function normFeature(f) {
 function makeDoc(p) {
   const doc = Object.assign({ name: 'Untitled', seq: '', circular: true, features: [], meta: {}, undo: [], redo: [], dirty: false, rev: 0, anchor: 0, caret: 0, selFid: null, handle: null, _cache: {} }, p);
   doc.id = ++_docUid;
-  doc.seq = doc.seq.toUpperCase();
   const n = doc.seq.length;
   doc.features = doc.features.filter(f => f.locs.every(([a, b]) => a >= 0 && b <= n && b > a)).map(normFeature);
   return doc;
@@ -1684,9 +1720,9 @@ function currentClip(doc) {
 function storeClip(clip) { App.clip = clip; store.set('clip', clip); }
 function lookupClip(text) {
   const c = App.clip || store.get('clip', null);
-  const t = cleanSeq(text);
-  if (c && c.text === t) return c;
-  if (c && c.text && revcomp(c.text) === t) return revcompClip(c);
+  const t = cleanSeq(text), T = t.toUpperCase();   // case-insensitive match, but the pasted text keeps its own case
+  if (c && c.text.toUpperCase() === T) return { ...c, text: t };
+  if (c && c.text && revcomp(c.text).toUpperCase() === T) return { ...revcompClip(c), text: t };
   return { text: t, features: [] };
 }
 async function copyToSystem(text) {
@@ -1708,6 +1744,8 @@ async function doCopyRC(doc) {
 function pasteClip(doc, clip) {
   if (!clip || !clip.text) return toast('Nothing to paste');
   const r = selRange(doc) || [doc.caret, doc.caret];
+  if (!App.editing) return lockedToast();
+  warnNonATGC(clip.text, 'in the pasted sequence');
   editReplace(doc, r[0], r[1], clip.text, clip.features);
   toast(`Pasted ${fmtBp(clip.text.length)}${clip.features.length ? ` with ${clip.features.length} feature${clip.features.length > 1 ? 's' : ''}` : ''}`);
 }
@@ -1794,6 +1832,14 @@ function closeDoc(doc) {
   const i = App.docs.indexOf(doc); App.docs.splice(i, 1);
   if (App.cur === doc) App.cur = App.docs[Math.min(i, App.docs.length - 1)] || null;
   requestUpdate(true);
+}
+
+
+/* warn (and later highlight) when input contains anything other than A/C/G/T */
+function warnNonATGC(text, where) {
+  const st = nonATGCStats(text);
+  if (st.count) toast(`⚠ ${st.count.toLocaleString('en-US')} non-ATGC character${st.count > 1 ? 's' : ''} ${where} (${st.detail}) – highlighted in red in the sequence view`, 8000, 'warn');
+  return st.count;
 }
 
 </script>
@@ -2128,6 +2174,7 @@ function renderSeq(doc, force) {
     b.push(`<div class="gut" style="top:${eH}px">${(rs + 1).toLocaleString('en-US')}</div>`);
     b.push(`<div class="rseq" style="left:${SV.gutter}px;width:${Math.max(len, 1) * cw}px">`);
     for (const s of rowSite[r]) b.push(`<div class="eshade" data-ek="${esc(s.e.name)}:${s.e.top}" style="left:${f2((s.x - rs) * cw)}px;width:${f2((s.y - s.x) * cw)}px;top:${eH}px;height:${2 * SV.lineH}px"></div>`);
+    for (const m of doc.seq.slice(rs, re).matchAll(/[^ACGTacgt]/g)) b.push(`<div class="badbase" style="left:${f2(m.index * cw)}px;width:${f2(cw)}px;top:${eH}px;height:${2 * SV.lineH}px"></div>`);
     for (const it of els) {
       const x = it.col * cw, top = it.k * SV.enzH;
       b.push(`<div class="elbl" data-enz="${esc(it.e.name)}" data-ek="${esc(it.e.name)}:${it.e.top}" data-s="${it.e.s}" data-e="${it.e.e}" style="left:${f2(x)}px;top:${top}px">${esc(it.e.name)}</div>`);
@@ -2254,6 +2301,7 @@ function renderMini(doc) {
     for (const [a, b] of f.locs) out.push(`<rect class="mp-feat${f.orf ? ' orf' : ''}${doc.selFid === f.id ? ' on' : ''}" data-fid="${f.id}" x="${f2(X(a))}" y="${y}" width="${f2(Math.max(2, X(b) - X(a)))}" height="${FH}" rx="2" fill="${f.color}"/>`);
   }
   for (const e of enzymeView(doc)) out.push(`<line class="mp-cut" x1="${f2(X(e.top))}" y1="${baseY - 2}" x2="${f2(X(e.top))}" y2="${baseY + 8}"/>`);
+  for (const p of badBases(doc).slice(0, 3000)) out.push(`<line class="mp-bad" x1="${f2(X(p))}" y1="${baseY - 6}" x2="${f2(X(p))}" y2="${baseY + 5}"/>`);
   const sel = selRange(doc);
   if (sel) out.push(`<rect class="mp-sel" x="${f2(X(sel[0]))}" y="2" width="${f2(Math.max(2, X(sel[1]) - X(sel[0])))}" height="${H - 4}"/>`);
   else out.push(`<line class="mp-caret" x1="${f2(X(doc.caret))}" y1="2" x2="${f2(X(doc.caret))}" y2="${H - 2}"/>`);
@@ -2351,6 +2399,7 @@ function renderStatus(doc) {
   } else left = `Cursor after base ${doc.caret.toLocaleString('en-US')}`;
   if (UI.find.q) { const h = UI.find.res[UI.find.idx]; left += ` · Find: ${UI.find.res.length ? `${UI.find.idx >= 0 ? UI.find.idx + 1 : '–'} of ${UI.find.res.length}` : 'no matches'}${h ? (h.strand === 1 ? ' · forward strand (top)' : ' · reverse strand (bottom)') : ''}`; }
   $('#stLeft').textContent = left;
+  const bad = badBases(doc).length, w = $('#stWarn'); w.hidden = !bad; if (bad) w.textContent = `⚠ ${bad.toLocaleString('en-US')} non-ATGC`;
   $('#stRight').textContent = `${doc.circular ? 'Circular' : 'Linear'} · ${fmtBp(n)} · ${doc.features.length} features · GC ${gcPercent(doc.seq).toFixed(1)}%`;
 }
 
@@ -2560,7 +2609,7 @@ function openFeatureDialog(doc, f) {
       const quals = { ...(f ? f.quals : {}) }; const nt = note.value.trim(); if (nt) quals.note = nt.split('\n'); else delete quals.note;
       const data = { name: name.value.trim(), type: type.value, strand: +strand.value, color: color.value, locs, quals };
       if (lib.checked) {
-        let s = locs.map(([a, b]) => doc.seq.slice(a, b)).join(''); if (data.strand === -1) s = revcomp(s);
+        let s = locs.map(([a, b]) => doc.seq.slice(a, b)).join(''); if (data.strand === -1) s = revcomp(s); s = s.toUpperCase();
         if (s.length < 6) toast('Too short for the library (min 6 bp)');
         else { const u = userLibrary().filter(x => x.name.toLowerCase() !== data.name.toLowerCase()); u.push({ name: data.name, type: data.type, color: data.color, seq: s, dir: data.strand !== 0 }); saveUserLibrary(u); toast(`“${data.name}” added to the feature library`); }
       }
@@ -2618,7 +2667,7 @@ function openDetectDialog(doc) {
 /* ----- add this plasmid's features to the feature library ----- */
 function featureSequence(doc, f) {
   const cat = f.locs.map(([a, b]) => doc.seq.slice(a, b)).join('');
-  return f.strand === -1 ? revcomp(cat) : cat;
+  return (f.strand === -1 ? revcomp(cat) : cat).toUpperCase();   // library sequences are stored upper-case
 }
 function openAddToLibraryDialog(doc) {
   const lib = fullLibrary(), byName = new Map(lib.map(l => [l.name.toLowerCase(), l]));
@@ -2665,13 +2714,20 @@ function openAddToLibraryDialog(doc) {
   } }], { wide: true });
 }
 
+/* live warning line under a sequence textarea */
+function liveWarn(ta) {
+  const line = el('div', { class: 'warnline' });
+  const upd = () => { const st = nonATGCStats(cleanSeq(ta.value)); line.textContent = st.count ? `⚠ ${st.count.toLocaleString('en-US')} non-ATGC character${st.count > 1 ? 's' : ''} (${st.detail}) – they will be kept and highlighted in red` : ''; line.style.display = st.count ? 'block' : 'none'; };
+  ta.addEventListener('input', upd); upd(); return line;
+}
+
 function openInsertDialog(doc) {
   if (!App.editing) return lockedToast();
   const pos = el('input', { type: 'number', min: 0, max: doc.seq.length, value: selRange(doc) ? selRange(doc)[0] : doc.caret });
   const ta = el('textarea', { rows: 6, class: 'mono', placeholder: 'Paste or type DNA (FASTA allowed)…' });
   const rc = el('input', { type: 'checkbox' });
-  openModal('Insert sequence', el('div', { class: 'form' }, field('Insert after base', pos, '0 = at the very start'), field('Sequence', ta), el('label', { class: 'chk' }, rc, 'Insert reverse complement')),
-    [{ label: 'Cancel' }, { label: 'Insert', primary: true, action: () => { let s = cleanSeq(ta.value); if (!s) { toast('No valid DNA found'); return false; } if (rc.checked) s = revcomp(s); const p = clamp(+pos.value || 0, 0, doc.seq.length); editReplace(doc, p, p, s); } }]);
+  openModal('Insert sequence', el('div', { class: 'form' }, field('Insert after base', pos, '0 = at the very start'), field('Sequence', ta), liveWarn(ta), el('label', { class: 'chk' }, rc, 'Insert reverse complement')),
+    [{ label: 'Cancel' }, { label: 'Insert', primary: true, action: () => { let s = cleanSeq(ta.value); if (!s) { toast('No valid DNA found'); return false; } if (rc.checked) s = revcomp(s); const p = clamp(+pos.value || 0, 0, doc.seq.length); warnNonATGC(s, 'in the inserted sequence'); editReplace(doc, p, p, s); } }]);
 }
 
 function openGotoDialog(doc) {
@@ -2685,12 +2741,12 @@ function openGotoDialog(doc) {
 function openNewSeqDialog() {
   const name = el('input', { value: 'New plasmid' }), ta = el('textarea', { rows: 8, class: 'mono', placeholder: 'Paste DNA sequence (raw, FASTA or GenBank text)…' });
   const topo = el('select', {}, el('option', { value: 'c' }, 'Circular'), el('option', { value: 'l' }, 'Linear'));
-  openModal('New from sequence', el('div', { class: 'form' }, field('Name', name), field('Topology', topo), field('Sequence', ta)), [{ label: 'Cancel' }, { label: 'Create', primary: true, action: () => {
+  openModal('New from sequence', el('div', { class: 'form' }, field('Name', name), field('Topology', topo), field('Sequence', ta), liveWarn(ta)), [{ label: 'Cancel' }, { label: 'Create', primary: true, action: () => {
     try {
       let d;
       if (/^LOCUS/m.test(ta.value)) d = parseGenBank(ta.value); else d = { name: name.value.trim() || 'New plasmid', seq: cleanSeq(ta.value), circular: topo.value === 'c', features: [], meta: {} };
       if (!d.seq) { toast('No valid DNA found'); return false; }
-      addDoc(d, { detect: true });
+      addDoc(d, { detect: true }); warnNonATGC(d.seq, 'in this sequence');
     } catch (e) { toast(e.message); return false; }
   } }]);
 }
@@ -2726,7 +2782,7 @@ function openLibraryDialog() {
       el('div', { class: 'btnrow' }, el('button', { class: 'btn primary', onclick: () => {
         if (!name.value.trim()) return toast('Name required');
         const e = { name: name.value.trim(), type: type.value, color: color.value };
-        if (kind.value === 'dna') { e.seq = cleanSeq(seq.value); if (e.seq.length < 6) return toast('Need at least 6 bp'); } else { e.aa = seq.value.toUpperCase().replace(/[^A-Z]/g, ''); if (e.aa.length < 3) return toast('Need at least 3 residues'); }
+        if (kind.value === 'dna') { e.seq = cleanSeq(seq.value).toUpperCase(); if (e.seq.length < 6) return toast('Need at least 6 bp'); } else { e.aa = seq.value.toUpperCase().replace(/[^A-Z]/g, ''); if (e.aa.length < 3) return toast('Need at least 3 residues'); }
         saveUserLibrary(userLibrary().filter(x => x.name.toLowerCase() !== e.name.toLowerCase()).concat([e])); render(); toast('Added to library');
       } }, 'Add to library'),
       el('button', { class: 'btn', onclick: () => { if (App.cur) openAddToLibraryDialog(App.cur); else toast('Open a plasmid first'); } }, 'Add this plasmid’s features…'),
@@ -2763,7 +2819,7 @@ async function openFiles(files) {
     try {
       const buf = await file.arrayBuffer();
       const d = parseAny(buf, file.name);
-      const doc = addDoc(d, { detect: true });
+      const doc = addDoc(d, { detect: true }); warnNonATGC(doc.seq, `in ${file.name}`);
       if (doc.features.length && !d.features.length) doc.dirty = false;
     } catch (e) { toast(`${file.name}: ${e.message}`, 5000); }
   }
@@ -2933,7 +2989,7 @@ function wireKeys() {
       case 'Backspace': e.preventDefault(); deleteSelection(doc, false); return;
       case 'Delete': e.preventDefault(); deleteSelection(doc, true); return;
     }
-    if (seqFocus && /^[a-zA-Z]$/.test(k) && /[ACGTUNRYKMSWBDHV]/i.test(k)) { e.preventDefault(); if (!App.editing) return lockedToast(); typeBases(doc, k); }
+    if (seqFocus && /^[a-zA-Z]$/.test(k) && /[ACGTUNRYKMSWBDHV]/i.test(k)) { e.preventDefault(); if (!App.editing) return lockedToast(); if (!/[ACGTacgt]/.test(k)) toast(`⚠ “${k}” is not A/C/G/T – it will be highlighted in red`, 3500, 'warn'); typeBases(doc, k); }
   });
   document.addEventListener('copy', e => { clearTimeout(clipTimer); const doc = App.cur; if (!doc || inTextField(e.target)) return; const clip = currentClip(doc); if (!clip) return; e.preventDefault(); e.clipboardData.setData('text/plain', clip.text); storeClip(clip); toast(`Copied ${fmtBp(clip.text.length)}${clip.features.length ? ` + ${clip.features.length} feature(s)` : ''}`); });
   document.addEventListener('cut', e => { clearTimeout(clipTimer); const doc = App.cur; if (!doc || inTextField(e.target)) return; const clip = currentClip(doc); if (!clip) return; e.preventDefault(); e.clipboardData.setData('text/plain', clip.text); storeClip(clip); deleteSelection(doc); toast(`Cut ${fmtBp(clip.text.length)}`); });
@@ -3009,7 +3065,7 @@ function wireAA() {
     hide(); cur = i;
     const bar = i.closest('.fbar'), f = featureById(doc, bar.dataset.fid); if (!f) return;
     const pos = i.dataset.p.split(',').map(Number), aa = i.dataset.a, num = +i.dataset.n, info = AA_INFO[aa] || [aa, aa];
-    const codon = pos.map(p => (f.strand === -1 ? COMP[doc.seq[p]] || 'N' : doc.seq[p])).join('');
+    const codon = pos.map(p => (f.strand === -1 ? compChar(doc.seq[p]) : doc.seq[p])).join('').toUpperCase();
     const cod = cdsCodons(doc, f), total = cod.length - (cod.length && cod[cod.length - 1].aa === '*' ? 1 : 0);
     const isExt = bar.classList.contains('ext');
     const row = (k, v) => `<div class="tr"><span>${k}</span><b>${v}</b></div>`;
@@ -3071,6 +3127,12 @@ function wireSplit() {
   drag($('#splitMS'), ev => { const vp = $('#viewport').getBoundingClientRect(); S.mapW = Math.round(clamp(ev.clientX - vp.left, 200, vp.width - 260)); }, () => { S.mapW = 0; });
   drag($('#splitSide'), ev => { const r = main.getBoundingClientRect(); S.sideW = Math.round(clamp(r.right - ev.clientX, 220, Math.min(720, r.width - 320))); }, () => { S.sideW = 0; });
 }
+function jumpToBad() {
+  const doc = App.cur; if (!doc) return; const bad = badBases(doc); if (!bad.length) return;
+  const from = selRange(doc) ? selRange(doc)[1] - 1 : doc.caret - 1;
+  const p = bad.find(x => x > from) ?? bad[0];
+  setSel(doc, p, p + 1);
+}
 function wireMini() {
   const host = $('#miniMap'); let down = false;
   const go = e => { const svg = host.querySelector('svg'); if (!svg || !App.cur) return; const r = svg.getBoundingClientRect(); const p = (e.clientX - r.left - MINI.M) / (r.width - 2 * MINI.M) * MINI.n; scrollSeqToPos(clamp(Math.round(p), 0, MINI.n)); };
@@ -3092,6 +3154,7 @@ function init() {
   const find = $('#find');
   find.addEventListener('input', debounce(() => { if (App.cur) { UI.find = { q: find.value, res: findAll(App.cur, find.value), idx: -1 }; requestUpdate(false); } }, 150));
   find.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runFind(e.shiftKey ? -1 : 1); } else if (e.key === 'Escape') { find.blur(); } });
+  $('#stWarn').addEventListener('click', jumpToBad);
   applyLayout(); wireMap(); wireSeq(); wireKeys(); wireHover(); wirePos(); wireAA(); wireSplit(); wireMini();
   new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)).observe($('#viewport'));
   { const ro = new ResizeObserver(debounce(() => { if (App.cur) requestUpdate(false); }, 60)); ro.observe($('#mapPane')); ro.observe($('#seqPane')); }

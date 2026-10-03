@@ -192,7 +192,7 @@ function writeGenBank(doc) {
   }
   lines.push('ORIGIN');
   for (let i = 0; i < n; i += 60) {
-    const chunk = doc.seq.slice(i, i + 60).toLowerCase().match(/.{1,10}/g).join(' ');
+    const chunk = doc.seq.slice(i, i + 60).match(/.{1,10}/g).join(' ');
     lines.push(String(i + 1).padStart(9) + ' ' + chunk);
   }
   lines.push('//');

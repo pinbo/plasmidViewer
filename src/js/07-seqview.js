@@ -74,6 +74,7 @@ function renderSeq(doc, force) {
     b.push(`<div class="gut" style="top:${eH}px">${(rs + 1).toLocaleString('en-US')}</div>`);
     b.push(`<div class="rseq" style="left:${SV.gutter}px;width:${Math.max(len, 1) * cw}px">`);
     for (const s of rowSite[r]) b.push(`<div class="eshade" data-ek="${esc(s.e.name)}:${s.e.top}" style="left:${f2((s.x - rs) * cw)}px;width:${f2((s.y - s.x) * cw)}px;top:${eH}px;height:${2 * SV.lineH}px"></div>`);
+    for (const m of doc.seq.slice(rs, re).matchAll(/[^ACGTacgt]/g)) b.push(`<div class="badbase" style="left:${f2(m.index * cw)}px;width:${f2(cw)}px;top:${eH}px;height:${2 * SV.lineH}px"></div>`);
     for (const it of els) {
       const x = it.col * cw, top = it.k * SV.enzH;
       b.push(`<div class="elbl" data-enz="${esc(it.e.name)}" data-ek="${esc(it.e.name)}:${it.e.top}" data-s="${it.e.s}" data-e="${it.e.e}" style="left:${f2(x)}px;top:${top}px">${esc(it.e.name)}</div>`);
@@ -200,6 +201,7 @@ function renderMini(doc) {
     for (const [a, b] of f.locs) out.push(`<rect class="mp-feat${f.orf ? ' orf' : ''}${doc.selFid === f.id ? ' on' : ''}" data-fid="${f.id}" x="${f2(X(a))}" y="${y}" width="${f2(Math.max(2, X(b) - X(a)))}" height="${FH}" rx="2" fill="${f.color}"/>`);
   }
   for (const e of enzymeView(doc)) out.push(`<line class="mp-cut" x1="${f2(X(e.top))}" y1="${baseY - 2}" x2="${f2(X(e.top))}" y2="${baseY + 8}"/>`);
+  for (const p of badBases(doc).slice(0, 3000)) out.push(`<line class="mp-bad" x1="${f2(X(p))}" y1="${baseY - 6}" x2="${f2(X(p))}" y2="${baseY + 5}"/>`);
   const sel = selRange(doc);
   if (sel) out.push(`<rect class="mp-sel" x="${f2(X(sel[0]))}" y="2" width="${f2(Math.max(2, X(sel[1]) - X(sel[0])))}" height="${H - 4}"/>`);
   else out.push(`<line class="mp-caret" x1="${f2(X(doc.caret))}" y1="2" x2="${f2(X(doc.caret))}" y2="${H - 2}"/>`);

@@ -32,7 +32,6 @@ function normFeature(f) {
 function makeDoc(p) {
   const doc = Object.assign({ name: 'Untitled', seq: '', circular: true, features: [], meta: {}, undo: [], redo: [], dirty: false, rev: 0, anchor: 0, caret: 0, selFid: null, handle: null, _cache: {} }, p);
   doc.id = ++_docUid;
-  doc.seq = doc.seq.toUpperCase();
   const n = doc.seq.length;
   doc.features = doc.features.filter(f => f.locs.every(([a, b]) => a >= 0 && b <= n && b > a)).map(normFeature);
   return doc;
@@ -152,9 +151,9 @@ function currentClip(doc) {
 function storeClip(clip) { App.clip = clip; store.set('clip', clip); }
 function lookupClip(text) {
   const c = App.clip || store.get('clip', null);
-  const t = cleanSeq(text);
-  if (c && c.text === t) return c;
-  if (c && c.text && revcomp(c.text) === t) return revcompClip(c);
+  const t = cleanSeq(text), T = t.toUpperCase();   // case-insensitive match, but the pasted text keeps its own case
+  if (c && c.text.toUpperCase() === T) return { ...c, text: t };
+  if (c && c.text && revcomp(c.text).toUpperCase() === T) return { ...revcompClip(c), text: t };
   return { text: t, features: [] };
 }
 async function copyToSystem(text) {
@@ -176,6 +175,8 @@ async function doCopyRC(doc) {
 function pasteClip(doc, clip) {
   if (!clip || !clip.text) return toast('Nothing to paste');
   const r = selRange(doc) || [doc.caret, doc.caret];
+  if (!App.editing) return lockedToast();
+  warnNonATGC(clip.text, 'in the pasted sequence');
   editReplace(doc, r[0], r[1], clip.text, clip.features);
   toast(`Pasted ${fmtBp(clip.text.length)}${clip.features.length ? ` with ${clip.features.length} feature${clip.features.length > 1 ? 's' : ''}` : ''}`);
 }
@@ -262,4 +263,12 @@ function closeDoc(doc) {
   const i = App.docs.indexOf(doc); App.docs.splice(i, 1);
   if (App.cur === doc) App.cur = App.docs[Math.min(i, App.docs.length - 1)] || null;
   requestUpdate(true);
+}
+
+
+/* warn (and later highlight) when input contains anything other than A/C/G/T */
+function warnNonATGC(text, where) {
+  const st = nonATGCStats(text);
+  if (st.count) toast(`⚠ ${st.count.toLocaleString('en-US')} non-ATGC character${st.count > 1 ? 's' : ''} ${where} (${st.detail}) – highlighted in red in the sequence view`, 8000, 'warn');
+  return st.count;
 }
