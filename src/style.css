@@ -272,3 +272,13 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
 .badge.new { background: #2eb872; border-color: #2eb872; color: #fff; }
 .badge.present { background: var(--panel2); color: var(--muted); }
 .badge { min-width: 52px; }
+
+/* amino-acid numbering + in-frame continuation arrow */
+.fnum { position: absolute; height: 10px; pointer-events: none; }
+.fnum b { position: absolute; top: 0; text-align: center; font: 600 8.5px/10px var(--mono); color: var(--muted); }
+.fbar.ext { outline: 1px dashed; outline-offset: -1px; box-shadow: none; font-weight: 600; }
+.extline { position: absolute; height: 12px; pointer-events: none; }
+.extline::before { content: ""; position: absolute; left: 0; right: 0; top: 5px; border-top: 2px dashed var(--ecol); }
+.extline.hr::after { content: ""; position: absolute; right: -1px; top: 0; border-left: 9px solid var(--ecol); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+.extline.hl::after { content: ""; position: absolute; left: -1px; top: 0; border-right: 9px solid var(--ecol); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+.extlbl { position: absolute; left: 50%; top: 0; transform: translateX(-50%); background: var(--panel); padding: 0 6px; font: 600 9.5px/12px var(--font); color: var(--muted); white-space: nowrap; }

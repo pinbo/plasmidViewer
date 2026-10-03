@@ -162,3 +162,40 @@ function cdsCodons(doc, f) {
   for (let i = 0; i + 2 < pos.length; i += 3) out.push({ aa: codonToAA(bases.substr(i, 3)), pos: [pos[i], pos[i + 1], pos[i + 2]] });
   doc._cache[key] = out; return out;
 }
+
+
+/* CDS without a terminal stop codon: continue translating in frame (downstream, same strand) until the next stop codon
+   or the end of the sequence. Returns a pseudo-feature {ext:true, parent, locs, aaOffset, stopped} or null. */
+function cdsExtension(doc, f) {
+  const key = 'ext' + f.id + ':' + f.locs.map(l => l.join('-')).join(',') + f.strand;
+  if (key in doc._cache) return doc._cache[key];
+  let res = null;
+  const cod = cdsCodons(doc, f), total = f.locs.reduce((s, l) => s + l[1] - l[0], 0);
+  if (cod.length && total % 3 === 0 && cod[cod.length - 1].aa !== '*') {
+    const n = doc.seq.length, dir = f.strand === -1 ? -1 : 1, limit = Math.min(n - total, 30000);
+    let p = cod[cod.length - 1].pos[2], stopped = false;
+    const pos = [];
+    while (pos.length < limit) {
+      const trio = [];
+      for (let k = 0; k < 3; k++) {
+        p += dir;
+        if (doc.circular) p = ((p % n) + n) % n;
+        else if (p < 0 || p >= n) break;
+        trio.push(p);
+      }
+      if (trio.length < 3) break;
+      const bases = trio.map(q => (dir === -1 ? COMP[doc.seq[q]] || 'N' : doc.seq[q])).join('');
+      pos.push(...trio);
+      if (codonToAA(bases) === '*') { stopped = true; break; }
+    }
+    if (pos.length) {
+      const runs = []; let cur = [pos[0], pos[0]];
+      for (let i = 1; i < pos.length; i++) { if (pos[i] === pos[i - 1] + dir) cur[1] = pos[i]; else { runs.push(cur); cur = [pos[i], pos[i]]; } }
+      runs.push(cur);
+      const locs = runs.map(([a, b]) => (dir === 1 ? [a, b + 1] : [b, a + 1]));
+      if (dir === -1) locs.reverse();
+      res = { id: 'ext' + f.id, name: 'in frame with ' + f.name, type: 'CDS', ext: true, parent: f, strand: f.strand, color: f.color, locs, aaOffset: cod.length, stopped, quals: {} };
+    }
+  }
+  doc._cache[key] = res; return res;
+}

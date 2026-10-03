@@ -26,8 +26,11 @@ function renderSeq(doc, force) {
   SV.key = key; SV.bpr = bpr;
   const rows = Math.max(1, Math.ceil(n / bpr));
 
+  const showTrans = App.settings.showTrans;
   const feats = visibleFeatures(doc);
+  if (showTrans) for (const f of visibleFeatures(doc)) { if (f.type === 'CDS' && !f.orf) { const x = cdsExtension(doc, f); if (x) feats.push(x); } }
   const { lane } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs })), 0);
+  const isTrans = f => showTrans && (f.type === 'CDS' || f.orf);
   const rowFeat = Array.from({ length: rows }, () => []);
   for (const f of feats) {
     const k = lane.get(f.id), headSeg = f.strand === -1 ? 0 : f.locs.length - 1;
@@ -51,7 +54,6 @@ function renderSeq(doc, force) {
   }
 
   const html = [], tops = []; let y = 0;
-  const showTrans = App.settings.showTrans;
   for (let r = 0; r < rows; r++) {
     const rs = r * bpr, re = Math.min(n, rs + bpr), len = re - rs;
     // enzyme label lanes
@@ -59,8 +61,12 @@ function renderSeq(doc, force) {
     const ends = [];
     for (const it of els) { let k = 0; while (k < ends.length && ends[k] > it.col * cw - 2) k++; ends[k] = it.col * cw + it.w; it.k = k; }
     const eLanes = ends.length, eH = eLanes ? eLanes * SV.enzH + 4 : 6;
+    // lane heights: plain bar 21px; translated CDS 31px (residue numbers above); in-frame continuation 44px (+ dashed arrow line)
     const fLanes = rowFeat[r].length ? Math.max(...rowFeat[r].map(o => o.lane)) + 1 : 0;
-    const H = eH + 2 * SV.lineH + (fLanes ? fLanes * SV.laneH + 8 : 6) + 8;
+    const laneH = Array(fLanes).fill(SV.laneH);
+    for (const o of rowFeat[r]) laneH[o.lane] = Math.max(laneH[o.lane], o.f.ext ? 44 : isTrans(o.f) ? 31 : SV.laneH);
+    const laneTop = []; let acc = 0; for (let k = 0; k < fLanes; k++) { laneTop.push(acc); acc += laneH[k]; }
+    const H = eH + 2 * SV.lineH + (fLanes ? acc + 8 : 6) + 8;
     tops.push(y); y += H;
 
     const b = [];
@@ -89,16 +95,26 @@ function renderSeq(doc, force) {
     b.push(`<div class="selLayer" style="top:${eH}px;height:${2 * SV.lineH}px"></div>`);
     const fy0 = eH + 2 * SV.lineH + 6;
     for (const o of rowFeat[r]) {
-      const f = o.f, left = (o.x - rs) * cw, w = (o.y - o.x) * cw, top = fy0 + o.lane * SV.laneH;
-      const cls = 'fbar' + (o.arrR ? ' arR' : '') + (o.arrL ? ' arL' : '') + (f.orf ? ' orf' : '') + (doc.selFid === f.id ? ' on' : '');
-      const fg = textOn(f.color);
-      let inner;
-      if (showTrans && (f.type === 'CDS' || f.orf)) {
-        const cod = cdsCodons(doc, f); const parts = [];
-        for (const c of cod) { const m = c.pos[1]; if (m >= o.x && m < o.y) parts.push(`<i style="left:${f2((m - o.x) * cw)}px;width:${f2(cw)}px">${c.aa}</i>`); }
+      const f = o.f, left = (o.x - rs) * cw, w = (o.y - o.x) * cw, top = fy0 + laneTop[o.lane], tr = isTrans(f);
+      const cls = 'fbar' + (o.arrR && !f.ext ? ' arR' : '') + (o.arrL && !f.ext ? ' arL' : '') + (f.orf ? ' orf' : '') + (f.ext ? ' ext' : '') + (doc.selFid === (f.ext ? f.parent.id : f.id) ? ' on' : '');
+      const fid = f.ext ? f.parent.id : f.id;
+      let inner, nums = '';
+      if (tr) {
+        const cod = cdsCodons(doc, f), off = f.aaOffset || 0, parts = [];
+        cod.forEach((c, i) => {
+          const m = c.pos[1]; if (m < o.x || m >= o.y) return;
+          parts.push(`<i style="left:${f2((m - o.x) * cw)}px;width:${f2(cw)}px">${c.aa}</i>`);
+          const num = off + i + 1; if (num === 1 || num % 10 === 0) nums += `<b style="left:${f2((m - o.x) * cw - 14)}px;width:${f2(cw + 28)}px">${num}</b>`;
+        });
         inner = parts.join('');
+        b.push(`<div class="fnum" style="left:${f2(left)}px;top:${top}px;width:${f2(w)}px">${nums}</div>`);
       } else inner = `<span>${esc(f.name)}</span>`;
-      b.push(`<div class="${cls}" data-fid="${f.id}" style="left:${f2(left)}px;top:${top}px;width:${f2(w)}px;background:${f.color};color:${fg}">${inner}</div>`);
+      const by = top + (tr ? 10 : 0), bg = f.ext ? tint(f.color, 0.22) : f.color, fg = f.ext ? 'var(--text)' : textOn(f.color);
+      b.push(`<div class="${cls}" data-fid="${fid}" style="left:${f2(left)}px;top:${by}px;width:${f2(w)}px;background:${bg};color:${fg}${f.ext ? ';outline-color:' + f.color : ''}">${inner}</div>`);
+      if (f.ext) {
+        const label = f.name + (f.stopped ? '' : ' (no stop codon found)');
+        b.push(`<div class="extline${o.arrR ? ' hr' : ''}${o.arrL ? ' hl' : ''}" style="left:${f2(left)}px;top:${by + 21}px;width:${f2(w)}px;--ecol:${f.color}">${w > textWidth(label, '600 9.5px system-ui') + 34 ? `<span class="extlbl">${esc(label)}</span>` : ''}</div>`);
+      }
     }
     b.push('</div></div>');
     html.push(b.join(''));
@@ -110,6 +126,10 @@ function renderSeq(doc, force) {
   updateSeqSelection(doc);
 }
 
+function tint(hex, a) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 'rgba(127,127,127,' + a + ')';
+  const v = parseInt(m[1], 16); return `rgba(${v >> 16},${(v >> 8) & 255},${v & 255},${a})`;
+}
 function seqRowOfPos(p) { return Math.min(Math.floor(p / SV.bpr), Math.max(0, SV.rows.length - 1)); }
 
 function updateSeqSelection(doc) {
