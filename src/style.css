@@ -289,3 +289,7 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
 .aahl { position: absolute; top: 0; bottom: 0; background: rgba(229,50,45,.3); box-shadow: inset 0 0 0 1.5px #e5322d; border-radius: 2px; pointer-events: none; }
 .fbar i[data-p] { cursor: help; }
 .fbar i[data-p]:hover { background: rgba(255,255,255,.35); border-radius: 3px; }
+
+.badge.nolib { background: transparent; border-color: var(--accent); color: var(--accent); white-space: nowrap; }
+.badge.dup { background: rgba(245,166,35,.16); border-color: rgba(245,166,35,.7); color: #b86e00; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#featList .badge { font-size: 10px; font-weight: 600; padding: 1px 7px; flex: none; }

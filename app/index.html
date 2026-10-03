@@ -298,6 +298,10 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
 .fbar i[data-p] { cursor: help; }
 .fbar i[data-p]:hover { background: rgba(255,255,255,.35); border-radius: 3px; }
 
+.badge.nolib { background: transparent; border-color: var(--accent); color: var(--accent); white-space: nowrap; }
+.badge.dup { background: rgba(245,166,35,.16); border-color: rgba(245,166,35,.7); color: #b86e00; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#featList .badge { font-size: 10px; font-weight: 600; padding: 1px 7px; flex: none; }
+
 </style>
 </head>
 <body class="empty">
@@ -755,7 +759,7 @@ const BUILTIN_FEATURES = [
 ];
 
 function userLibrary() { return store.get('userLib', []); }
-function saveUserLibrary(l) { store.set('userLib', l); }
+function saveUserLibrary(l) { store.set('userLib', l); if (typeof requestUpdate === 'function') requestUpdate(true); }   // refresh the library badges in the Features panel
 function fullLibrary() {
   const user = userLibrary(); const names = new Set(user.map(u => u.name.toLowerCase()));
   return user.map(u => ({ ...u, user: true })).concat(BUILTIN_FEATURES.filter(b => !names.has(b.name.toLowerCase())));
@@ -2358,7 +2362,8 @@ function renderSide(doc) {
   if (tab === 'features') {
     body.append(el('div', { class: 'sidehead' },
       el('input', { type: 'search', placeholder: 'Filter features…', value: UI.fFilter, oninput: e => { UI.fFilter = e.target.value; renderFeatList(App.cur); } }),
-      el('button', { class: 'btn sm', onclick: () => openFeatureDialog(App.cur), title: 'Add a feature from the current selection' }, '+ Add')),
+      el('button', { class: 'btn sm', onclick: () => openFeatureDialog(App.cur), title: 'Add a feature from the current selection' }, '+ Add'),
+      el('button', { class: 'btn sm', onclick: () => openAddToLibraryDialog(App.cur), title: 'Add this plasmid’s features to the feature library' }, '→ Library')),
       el('div', { id: 'featList', class: 'list' }));
     renderFeatList(doc);
   } else if (tab === 'enzymes') {
@@ -2377,12 +2382,23 @@ function renderFeatList(doc) {
   const q = UI.fFilter.toLowerCase();
   const list = doc.features.map(f => ({ f, b: featBounds(f) })).filter(o => !q || o.f.name.toLowerCase().includes(q) || o.f.type.toLowerCase().includes(q)).sort((a, b) => a.b[0] - b.b[0]);
   host.innerHTML = '';
+  // library status of each feature (by name, or identical sequence under another name)
+  const lib = fullLibrary(), names = new Set(lib.map(l => l.name.toLowerCase())), seqs = new Map();
+  for (const l of lib) if (l.seq) { seqs.set(l.seq, l.name); seqs.set(revcomp(l.seq), l.name); }
+  const libBadge = f => {
+    const seq = featureSequence(doc, f); if (seq.length < 6) return null;
+    if (names.has(f.name.toLowerCase())) return el('span', { class: 'badge present', title: 'Already in the feature library' }, 'in library');
+    const same = seqs.get(seq);
+    if (same) return el('span', { class: 'badge dup', title: `Not by this name, but the same sequence is in the library as “${same}”` }, '= ' + same);
+    return el('span', { class: 'badge nolib', title: 'Not in the feature library yet – use “→ Library” to add it' }, 'not in library');
+  };
   if (!list.length) host.append(el('div', { class: 'empty-note' }, doc.features.length ? 'No matches.' : 'No features yet. Use “Detect features”, or select a region and click “+ Add”.'));
   for (const { f, b } of list) {
     const len = f.locs.reduce((s, l) => s + l[1] - l[0], 0);
     host.append(el('div', { class: 'item' + (doc.selFid === f.id ? ' on' : ''), 'data-fid': f.id, onclick: () => selectFeature(doc, f), ondblclick: () => openFeatureDialog(doc, f) },
       el('span', { class: 'sw', style: `background:${f.color}` }),
-      el('div', { class: 'fn' }, el('b', {}, f.name), el('small', {}, `${f.type} · ${b[0] + 1}..${b[1]} · ${len.toLocaleString('en-US')} bp ${f.strand === 1 ? '→' : f.strand === -1 ? '←' : ''}`))));
+      el('div', { class: 'fn' }, el('b', {}, f.name), el('small', {}, `${f.type} · ${b[0] + 1}..${b[1]} · ${len.toLocaleString('en-US')} bp ${f.strand === 1 ? '→' : f.strand === -1 ? '←' : ''}`)),
+      libBadge(f)));
   }
 }
 
@@ -2599,6 +2615,56 @@ function openDetectDialog(doc) {
   scan();
 }
 
+/* ----- add this plasmid's features to the feature library ----- */
+function featureSequence(doc, f) {
+  const cat = f.locs.map(([a, b]) => doc.seq.slice(a, b)).join('');
+  return f.strand === -1 ? revcomp(cat) : cat;
+}
+function openAddToLibraryDialog(doc) {
+  const lib = fullLibrary(), byName = new Map(lib.map(l => [l.name.toLowerCase(), l]));
+  const seen = new Set(), rows = [];
+  for (const f of doc.features.slice().sort((a, b) => featBounds(a)[0] - featBounds(b)[0])) {
+    const seq = featureSequence(doc, f), key = f.name.toLowerCase();
+    const row = { f, seq, status: 'new', note: '' };
+    const same = lib.find(l => l.seq && (l.seq === seq || l.seq === revcomp(seq)));
+    if (seq.length < 6) { row.status = 'skip'; row.note = 'too short (min 6 bp)'; }
+    else if (byName.has(key)) { row.status = 'inlib'; row.note = 'name already in library'; }
+    else if (seen.has(key)) { row.status = 'skip'; row.note = 'duplicate name in this plasmid'; }
+    else if (same) { row.status = 'dup'; row.note = `same sequence as “${same.name}”`; }
+    seen.add(key); rows.push(row);
+  }
+  const checked = new Set(rows.map((r, i) => (r.status === 'new' ? i : -1)).filter(i => i >= 0));
+  const list = el('div', { class: 'list tall detlist' }), summary = el('div', { class: 'small-note' });
+  const upd = () => { const n = rows.filter(r => r.status === 'new').length; summary.textContent = `${rows.length} feature${rows.length === 1 ? '' : 's'} in this plasmid · ${n} new to the library · ${checked.size} selected to add`; };
+  const render = () => {
+    list.innerHTML = '';
+    rows.forEach((r, i) => {
+      const dis = r.status === 'inlib' || r.status === 'skip';
+      const cb = el('input', { type: 'checkbox', checked: checked.has(i) || undefined, disabled: dis || undefined, onchange: e => { e.target.checked ? checked.add(i) : checked.delete(i); upd(); } });
+      const badge = r.status === 'new' ? ['new', 'new'] : r.status === 'dup' ? ['same seq', 'present'] : r.status === 'inlib' ? ['in library', 'present'] : ['skipped', 'present'];
+      list.append(el('div', { class: 'item det' + (dis ? ' present' : ''), onclick: e => { if (dis || e.target === cb) return; cb.checked = !cb.checked; cb.onchange({ target: cb }); } },
+        cb, el('span', { class: 'sw', style: `background:${r.f.color}` }),
+        el('div', { class: 'fn' }, el('b', {}, r.f.name), el('small', {}, `${r.f.type} · ${r.seq.length.toLocaleString('en-US')} bp ${r.f.strand === 1 ? '→' : r.f.strand === -1 ? '←' : ''}${r.note ? ' · ' + r.note : ''}`)),
+        el('span', { class: 'badge ' + badge[1] }, badge[0])));
+    });
+    if (!rows.length) list.append(el('div', { class: 'empty-note' }, 'This plasmid has no features yet.'));
+    upd();
+  };
+  const all = on => () => { checked.clear(); if (on) rows.forEach((r, i) => { if (r.status === 'new') checked.add(i); }); render(); };
+  render();
+  const body = el('div', { class: 'form' }, summary, list,
+    el('div', { class: 'btnrow' }, el('button', { class: 'btn sm', onclick: all(true) }, 'Select all new'), el('button', { class: 'btn sm', onclick: all(false) }, 'Select none')),
+    el('div', { class: 'small-note' }, 'Each feature’s current sequence (read in the feature’s own direction) is stored in your library and will be auto-detected in future plasmids. Features whose name is already in the library are not overwritten.'));
+  openModal('Add this plasmid’s features to the library', body, [{ label: 'Cancel' }, { label: 'Add to library', primary: true, action: () => {
+    const picked = rows.filter((r, i) => checked.has(i));
+    if (!picked.length) { toast('Nothing selected'); return false; }
+    const u = userLibrary().slice(); const names = new Set(u.map(x => x.name.toLowerCase()));
+    let n = 0;
+    for (const r of picked) { if (names.has(r.f.name.toLowerCase())) continue; u.push({ name: r.f.name, type: r.f.type, color: r.f.color, seq: r.seq, dir: r.f.strand !== 0 }); names.add(r.f.name.toLowerCase()); n++; }
+    saveUserLibrary(u); toast(`Added ${n} feature${n === 1 ? '' : 's'} to the library`);
+  } }], { wide: true });
+}
+
 function openInsertDialog(doc) {
   if (!App.editing) return lockedToast();
   const pos = el('input', { type: 'number', min: 0, max: doc.seq.length, value: selRange(doc) ? selRange(doc)[0] : doc.caret });
@@ -2663,6 +2729,7 @@ function openLibraryDialog() {
         if (kind.value === 'dna') { e.seq = cleanSeq(seq.value); if (e.seq.length < 6) return toast('Need at least 6 bp'); } else { e.aa = seq.value.toUpperCase().replace(/[^A-Z]/g, ''); if (e.aa.length < 3) return toast('Need at least 3 residues'); }
         saveUserLibrary(userLibrary().filter(x => x.name.toLowerCase() !== e.name.toLowerCase()).concat([e])); render(); toast('Added to library');
       } }, 'Add to library'),
+      el('button', { class: 'btn', onclick: () => { if (App.cur) openAddToLibraryDialog(App.cur); else toast('Open a plasmid first'); } }, 'Add this plasmid’s features…'),
       el('button', { class: 'btn', onclick: () => downloadBlob('feature-library.json', JSON.stringify(userLibrary(), null, 2), 'application/json') }, 'Export mine…'),
       el('button', { class: 'btn', onclick: () => { const i = el('input', { type: 'file', accept: '.json' }); i.onchange = async () => { try { const arr = JSON.parse(await i.files[0].text()); const cur = userLibrary(); for (const x of arr) if (x.name && (x.seq || x.aa)) { const k = cur.findIndex(c => c.name.toLowerCase() === x.name.toLowerCase()); if (k >= 0) cur[k] = x; else cur.push(x); } saveUserLibrary(cur); render(); toast('Library imported'); } catch (e) { toast('Could not read that file'); } }; i.click(); } }, 'Import…'))));
   };

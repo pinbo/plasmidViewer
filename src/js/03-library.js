@@ -43,7 +43,7 @@ const BUILTIN_FEATURES = [
 ];
 
 function userLibrary() { return store.get('userLib', []); }
-function saveUserLibrary(l) { store.set('userLib', l); }
+function saveUserLibrary(l) { store.set('userLib', l); if (typeof requestUpdate === 'function') requestUpdate(true); }   // refresh the library badges in the Features panel
 function fullLibrary() {
   const user = userLibrary(); const names = new Set(user.map(u => u.name.toLowerCase()));
   return user.map(u => ({ ...u, user: true })).concat(BUILTIN_FEATURES.filter(b => !names.has(b.name.toLowerCase())));
