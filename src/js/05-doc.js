@@ -5,7 +5,7 @@ const App = {
   docs: [], cur: null,
   settings: Object.assign({
     theme: 'auto', view: 'split', sideOpen: true, mapW: 0, sideW: 0, sideTab: 'features', enzMode: 'unique', enzShow: [],
-    showFeatures: true, showOrfs: false, orfMin: 100, showTrans: true, autoDetect: true, linZoom: 1,
+    showFeatures: true, showOrfs: false, orfMin: 100, showTrans: true, autoDetect: true, detectThr: 0.96, linZoom: 1,
   }, store.get('settings', {})),
   clip: null,
   editing: false,   // sequence editing is locked until the user switches it on (guards against accidental typing)
@@ -234,6 +234,10 @@ function runDetection(doc, quiet = false) {
   mutate(doc, () => { for (const f of found) doc.features.push(normFeature(f)); });
   if (!quiet) toast(`Added ${found.length} feature${found.length > 1 ? 's' : ''}`);
   return found.length;
+}
+
+function addFeatures(doc, feats) {
+  mutate(doc, () => { for (const f of feats) doc.features.push(normFeature(f)); });
 }
 
 function visibleFeatures(doc) {

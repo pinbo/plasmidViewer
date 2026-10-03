@@ -266,6 +266,51 @@ function openFeatureDialog(doc, f) {
   openModal(isNew ? 'Add feature' : 'Edit feature', body, buttons);
 }
 
+/* ----- feature detection dialog ----- */
+function openDetectDialog(doc) {
+  const S = App.settings;
+  const thr = el('input', { type: 'number', min: 50, max: 100, step: 1, value: Math.round(S.detectThr * 100), style: 'width:78px' });
+  const showPresent = el('input', { type: 'checkbox', checked: true });
+  const list = el('div', { class: 'list tall detlist' }), summary = el('div', { class: 'small-note' });
+  let cands = [], checked = new Set();
+  const render = () => {
+    list.innerHTML = '';
+    const rows = cands.map((c, i) => [c, i]).filter(([c]) => showPresent.checked || !c.present);
+    for (const [c, i] of rows) {
+      const cb = el('input', { type: 'checkbox', checked: checked.has(i) || undefined, disabled: c.present || undefined, onchange: e => { e.target.checked ? checked.add(i) : checked.delete(i); upd(); } });
+      const [a, b] = [c.locs[0][0], c.locs[c.locs.length - 1][1]];
+      list.append(el('div', { class: 'item det' + (c.present ? ' present' : ''), onclick: e => { if (c.present || e.target === cb) return; cb.checked = !cb.checked; cb.onchange({ target: cb }); } },
+        cb, el('span', { class: 'sw', style: `background:${c.entry.color || typeColor(c.entry.type)}` }),
+        el('div', { class: 'fn' }, el('b', {}, c.entry.name), el('small', {}, `${c.entry.type || 'misc_feature'} · ${a + 1}..${b} · ${c.len} ${c.entry.aa ? 'bp (protein motif)' : 'bp'} ${c.strand === 1 ? '→' : '←'}`)),
+        el('span', { class: 'ident' + (c.identity < 1 ? ' imperfect' : '') }, (c.identity * 100).toFixed(c.identity === 1 ? 0 : 1) + '%'),
+        el('span', { class: 'badge ' + (c.present ? 'present' : 'new') }, c.present ? 'in map' : 'new')));
+    }
+    if (!rows.length) list.append(el('div', { class: 'empty-note' }, cands.length ? 'Only features already in the map were found.' : 'No library features found at this threshold.'));
+    upd();
+  };
+  const upd = () => { const nNew = cands.filter(c => !c.present).length; summary.textContent = `${cands.length} match${cands.length === 1 ? '' : 'es'} · ${nNew} new · ${cands.length - nNew} already in the map · ${checked.size} selected to add`; };
+  const scan = () => {
+    const pct = clamp(+thr.value || 96, 50, 100); S.detectThr = pct / 100; saveSettings();
+    cands = detectCandidates(doc, fullLibrary(), S.detectThr);
+    checked = new Set(cands.map((c, i) => (c.present ? -1 : i)).filter(i => i >= 0));
+    render();
+  };
+  thr.addEventListener('input', debounce(scan, 350));
+  showPresent.addEventListener('change', render);
+  const sel = (all) => () => { checked = new Set(all ? cands.map((c, i) => (c.present ? -1 : i)).filter(i => i >= 0) : []); render(); };
+  const body = el('div', { class: 'form' },
+    el('div', { class: 'detbar' }, el('label', { class: 'chk' }, 'Minimum similarity to library sequence', thr, '%'), el('label', { class: 'chk' }, showPresent, 'Show features already in the map')),
+    summary, list,
+    el('div', { class: 'btnrow' }, el('button', { class: 'btn sm', onclick: sel(true) }, 'Select all new'), el('button', { class: 'btn sm', onclick: sel(false) }, 'Select none')),
+    el('div', { class: 'small-note' }, 'Similarity counts matching bases over the whole library sequence (substitutions only), on both strands. Protein motifs (tags, cleavage sites) must match exactly. “In map” = a feature with the same name already overlaps that region.'));
+  openModal('Detect common features', body, [{ label: 'Cancel' }, { label: 'Add selected', primary: true, action: () => {
+    const picked = cands.filter((c, i) => checked.has(i)).map(candidateToFeature);
+    if (!picked.length) { toast('Nothing selected'); return false; }
+    addFeatures(doc, picked); toast(`Added ${picked.length} feature${picked.length > 1 ? 's' : ''}`);
+  } }], { wide: true });
+  scan();
+}
+
 function openInsertDialog(doc) {
   if (!App.editing) return lockedToast();
   const pos = el('input', { type: 'number', min: 0, max: doc.seq.length, value: selRange(doc) ? selRange(doc)[0] : doc.caret });
@@ -415,7 +460,7 @@ const actions = {
   save: () => App.cur && saveDoc(App.cur), saveas: () => App.cur && saveDoc(App.cur, true),
   undo: () => App.cur && undo(App.cur), redo: () => App.cur && redo(App.cur),
   'view-map': () => setView('map'), 'view-seq': () => setView('seq'), 'view-split': () => setView('split'),
-  detect: () => App.cur && runDetection(App.cur), addfeature: () => App.cur && openFeatureDialog(App.cur), library: openLibraryDialog, help: openHelp,
+  detect: () => App.cur && openDetectDialog(App.cur), addfeature: () => App.cur && openFeatureDialog(App.cur), library: openLibraryDialog, help: openHelp,
   'find-next': () => runFind(1), 'find-prev': () => runFind(-1),
   toggleedit: () => { App.editing = !App.editing; toast(App.editing ? 'Sequence editing enabled' : 'Sequence editing disabled (features can still be edited)'); requestUpdate(true); },
   toggleside: () => { App.settings.sideOpen = !App.settings.sideOpen; saveSettings(); applyLayout(); requestUpdate(false); },

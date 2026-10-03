@@ -260,3 +260,15 @@ body.resizing { cursor: col-resize; user-select: none; }
 #editBtn.on { background: rgba(229,72,77,.12); box-shadow: inset 0 0 0 1px #e5484d; }
 #editBtn.on b, #editBtn.on span { color: #e5484d; }
 body:not(.editing) .caret { background: var(--muted); animation: none; }
+
+/* detect-features dialog */
+.detbar { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; }
+.detbar label.chk input[type=number] { margin: 0 2px; }
+.detlist { max-height: 340px; }
+.item.det { cursor: pointer; }
+.item.det.present { opacity: .6; cursor: default; }
+.ident { font: 600 12px var(--mono); color: var(--muted); min-width: 46px; text-align: right; }
+.ident.imperfect { color: #d98200; }
+.badge.new { background: #2eb872; border-color: #2eb872; color: #fff; }
+.badge.present { background: var(--panel2); color: var(--muted); }
+.badge { min-width: 52px; }

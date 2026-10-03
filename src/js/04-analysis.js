@@ -45,11 +45,10 @@ function scanDNA(seq, circular, pat, maxMis) {
   const L = pat.length, n = seq.length, hits = [];
   if (L > n) return hits;
   const s = circular ? seq + seq.slice(0, L - 1) : seq, lim = circular ? n : n - L + 1;
-  const p0 = pat.charCodeAt(0);
   for (let i = 0; i < lim; i++) {
     let mis = 0, j = 0;
     for (; j < L; j++) { if (s.charCodeAt(i + j) !== pat.charCodeAt(j) && ++mis > maxMis) break; }
-    if (j === L) hits.push(i);
+    if (j === L) hits.push([i, mis]);
   }
   return hits;
 }
@@ -58,15 +57,19 @@ function segsFor(start, len, n) {
   return start + len > n ? [[start, n], [0, start + len - n]] : [[start, start + len]];
 }
 
-function detectFeatures(doc, lib) {
+const locsOverlap = (a, b) => a.some(([x, y]) => b.some(([p, q]) => x < q && p < y));
+
+/* All library matches with >= thr identity (mismatch-only alignment, both strands; protein motifs in all 6 frames).
+   Each hit: {entry, locs, strand, mis, len, identity (0-1), present (an annotation with the same name already overlaps)} */
+function detectCandidates(doc, lib, thr = 0.96) {
   const seq = doc.seq, n = seq.length, found = [];
   for (const entry of lib) {
     if (entry.seq) {
       const pat = entry.seq.toUpperCase(), L = pat.length;
-      const maxMis = L < 30 ? 0 : Math.floor(L * 0.04);
+      const maxMis = Math.floor(L * (1 - thr) + 1e-9);
       const rc = revcomp(pat), palin = rc === pat;
-      for (const i of scanDNA(seq, doc.circular, pat, maxMis)) found.push({ entry, locs: segsFor(i, L, n), strand: 1 });
-      if (!palin) for (const i of scanDNA(seq, doc.circular, rc, maxMis)) found.push({ entry, locs: segsFor(i, L, n), strand: -1 });
+      for (const [i, mis] of scanDNA(seq, doc.circular, pat, maxMis)) found.push({ entry, locs: segsFor(i, L, n), strand: 1, mis, len: L });
+      if (!palin) for (const [i, mis] of scanDNA(seq, doc.circular, rc, maxMis)) found.push({ entry, locs: segsFor(i, L, n), strand: -1, mis, len: L });
     } else if (entry.aa) {
       const aa = entry.aa.toUpperCase(), L3 = aa.length * 3;
       const ext = doc.circular ? seq + seq.slice(0, L3 - 1) : seq;
@@ -78,22 +81,34 @@ function detectFeatures(doc, lib) {
           while (idx !== -1) {
             const r = f + idx * 3;
             const s = strand === 1 ? r : m - (r + L3);
-            if (s >= 0 && s < n) found.push({ entry, locs: segsFor(s, L3, n), strand });
+            if (s >= 0 && s < n) found.push({ entry, locs: segsFor(s, L3, n), strand, mis: 0, len: L3 });
             idx = prot.indexOf(aa, idx + 1);
           }
         }
       }
     }
   }
-  // de-duplicate against existing annotations and among themselves
-  const overlap = (a, b) => a.some(([x, y]) => b.some(([p, q]) => x < q && p < y));
+  // keep the best hit when the same library entry matches the same place more than once
+  found.sort((a, b) => a.mis / a.len - b.mis / b.len);
   const keep = [];
   for (const h of found) {
     const nm = h.entry.name.toLowerCase();
-    const dup = doc.features.concat(keep).some(f => f.name.toLowerCase() === nm && overlap(f.locs, h.locs));
-    if (!dup) keep.push({ name: h.entry.name, type: h.entry.type || 'misc_feature', strand: h.entry.dir === false ? 0 : h.strand, locs: h.locs, color: h.entry.color || typeColor(h.entry.type), quals: { note: ['auto-detected'] } });
+    if (keep.some(k => k.entry.name.toLowerCase() === nm && locsOverlap(k.locs, h.locs))) continue;
+    h.identity = 1 - h.mis / h.len;
+    h.present = doc.features.some(f => f.name.toLowerCase() === nm && locsOverlap(f.locs, h.locs));
+    keep.push(h);
   }
-  return keep;
+  return keep.sort((a, b) => a.locs[0][0] - b.locs[0][0]);
+}
+
+function candidateToFeature(h) {
+  const note = `auto-detected from library (${(h.identity * 100).toFixed(1)}% identity)`;
+  return { name: h.entry.name, type: h.entry.type || 'misc_feature', strand: h.entry.dir === false ? 0 : h.strand, locs: h.locs, color: h.entry.color || typeColor(h.entry.type), quals: { note: [note] } };
+}
+
+/* new features only (used for automatic annotation when opening un-annotated files) */
+function detectFeatures(doc, lib, thr = App.settings.detectThr) {
+  return detectCandidates(doc, lib, thr).filter(h => !h.present).map(candidateToFeature);
 }
 
 /* ---------- ORFs ---------- */
