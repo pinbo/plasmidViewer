@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plasmid Viewer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='%232f6fed' stroke-width='9'/%3E%3Cpath d='M32 4 l9 10 h-18z' fill='%23f29b34'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="empty">
+<div id="app">
+  <header id="toolbar">
+    <div class="grp">
+      <button class="tb" data-act="open" title="Open file(s)"><b>⤒</b><span>Open</span></button>
+      <button class="tb" data-act="new" title="New from pasted sequence"><b>＋</b><span>New</span></button>
+      <button class="tb" data-act="save" title="Save as GenBank"><b>⤓</b><span>Save</span></button>
+      <button class="tb" data-act="export" title="Export…"><b>⇪</b><span>Export</span></button>
+    </div>
+    <div class="grp">
+      <button class="tb" data-act="toggleedit" id="editBtn" title="Allow / block changing the sequence (type, insert, delete, paste). Off by default to prevent accidental changes; features can always be edited."><b>🔒</b><span>Seq edit off</span></button>
+      <button class="tb" data-act="undo" title="Undo"><b>↶</b><span>Undo</span></button>
+      <button class="tb" data-act="redo" title="Redo"><b>↷</b><span>Redo</span></button>
+    </div>
+    <div class="grp seg">
+      <button class="tb" data-act="view-map" title="Map only"><b>◎</b><span>Map</span></button>
+      <button class="tb" data-act="view-split" title="Map + sequence"><b>◫</b><span>Split</span></button>
+      <button class="tb" data-act="view-seq" title="Sequence only"><b>≡</b><span>Sequence</span></button>
+    </div>
+    <div class="grp">
+      <button class="tb" data-act="detect" title="Detect common features from the library"><b>✦</b><span>Detect features</span></button>
+      <button class="tb" data-act="addfeature" title="Add feature from selection"><b>▰</b><span>Add feature</span></button>
+      <button class="tb" data-act="library" title="Feature library"><b>☰</b><span>Library</span></button>
+    </div>
+    <div class="grp">
+      <label class="sel-lbl" title="Which restriction enzymes to display">Enzymes
+        <select id="enzMode"><option value="unique">Unique cutters</option><option value="dual">Unique &amp; dual</option><option value="gg">Golden Gate enzymes</option><option value="custom">My selected enzymes</option><option value="all">All cutters</option><option value="none">None</option></select></label>
+      <button class="tb" data-act="display" title="Display options"><b>◐</b><span>Display</span></button>
+    </div>
+    <div class="grp grow"></div>
+    <div class="grp findgrp">
+      <input id="find" type="search" placeholder="Find sequence…" autocomplete="off" spellcheck="false">
+      <button class="tb sm" data-act="find-prev" title="Previous match (Shift+Enter)">◀</button>
+      <button class="tb sm" data-act="find-next" title="Next match (Enter)">▶</button>
+    </div>
+    <div class="grp">
+      <button class="tb sm" data-act="toggleside" id="sideBtn" title="Show / hide the information panel">◨</button>
+      <button class="tb sm" data-act="theme" title="Toggle theme">◑</button>
+      <button class="tb sm" data-act="help" title="Help & shortcuts">?</button>
+    </div>
+  </header>
+  <div id="tabs"></div>
+  <main id="main">
+    <div id="welcome">
+      <div class="wcard">
+        <svg viewBox="0 0 120 120" width="110" height="110"><circle cx="60" cy="60" r="38" fill="none" stroke="var(--accent)" stroke-width="12" opacity=".25"/><path d="M60 22 A38 38 0 1 1 22 60" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"/><path d="M60 8 l14 14 h-28z" fill="#f29b34"/></svg>
+        <h1>Plasmid Viewer</h1>
+        <p>View, annotate and edit plasmid maps. Drop a <b>GenBank</b>, <b>FASTA</b> or <b>SnapGene .dna</b> file anywhere on this window.</p>
+        <div class="btnrow center">
+          <button class="btn primary" data-act="open">Open file…</button>
+          <button class="btn" data-act="new">Paste a sequence…</button>
+          <button class="btn" data-act="demo">Try a demo plasmid</button>
+        </div>
+      </div>
+    </div>
+    <section id="viewport" class="v-split">
+      <div id="mapPane"><div id="mapHost"></div></div>
+      <div class="splitter" id="splitMS" title="Drag to resize · double-click to reset"></div>
+      <div id="seqPane"><div id="seqScroll" tabindex="0"><div id="seqRows"></div></div><div id="miniMap"></div></div>
+    </section>
+    <div class="splitter" id="splitSide" title="Drag to resize · double-click to reset"></div>
+    <aside id="side">
+      <div id="sideTabs"><button data-tab="features">Features</button><button data-tab="enzymes">Enzymes</button><button data-tab="info">Info</button></div>
+      <div id="sideBody"></div>
+    </aside>
+  </main>
+  <footer id="status"><span id="stLeft"></span><span id="stRight"></span></footer>
+</div>
+<div id="dropHint">Drop file to open</div>
+<div id="tip"></div><div id="posTip"></div>
+<div id="modalRoot"></div><div id="menuRoot"></div><div id="toasts"></div>
+<script src="js/01-core.js"></script>
+<script src="js/02-formats.js"></script>
+<script src="js/03-library.js"></script>
+<script src="js/03b-neb-data.js"></script>
+<script src="js/03c-neb.js"></script>
+<script src="js/04-analysis.js"></script>
+<script src="js/05-doc.js"></script>
+<script src="js/06-maps.js"></script>
+<script src="js/07-seqview.js"></script>
+<script src="js/08-ui.js"></script>
+</body>
+</html>

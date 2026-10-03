@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+Icon?
+*.icloud
+
+# Node / Electron build output (the standalone dist/PlasmidViewer.html is kept)
+node_modules/
+app/dist/
+app/node_modules/
+npm-debug.log*
+
+# Editors / misc
+.idea/
+.vscode/
+*.swp
+*.log
