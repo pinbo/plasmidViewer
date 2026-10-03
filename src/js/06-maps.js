@@ -196,3 +196,56 @@ function linearBase(svg, e, n) {
   const r = svg.getBoundingClientRect(), W = +svg.dataset.w, x = e.clientX - r.left - LIN_M;
   return x < 0 || x > W - 2 * LIN_M ? -1 : Math.min(n - 1, Math.floor(x / (W - 2 * LIN_M) * n));
 }
+
+
+/* ---------- export the map as a standalone SVG / PNG ---------- */
+const EXPORT_CSS = `
+svg { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+.mp-ring { stroke: #6a7686; opacity: .55; fill: none; }
+.mp-tick { stroke: #6a7686; stroke-width: 1; opacity: .75; }
+.mp-ticklbl { fill: #6a7686; font-size: 11px; }
+.mp-feat { stroke: rgba(0,0,0,.28); stroke-width: .8; }
+.mp-feat.orf { opacity: .55; }
+.mp-lbl { fill: #1d2530; font-size: 12.5px; font-weight: 700; }
+.mp-lbl.enz { fill: #1c55c7; font-weight: 600; font-size: 12px; }
+.mp-flbl { font-size: 12px; font-weight: 600; }
+.mp-lead { fill: none; stroke: #6a7686; stroke-width: .8; opacity: .55; }
+.mp-cut { stroke: #1c55c7; stroke-width: 1; opacity: .45; }
+.mp-title { fill: #1d2530; font-size: 24px; font-weight: 700; }
+.mp-title.lin { font-size: 14px; }
+.mp-sub { fill: #6a7686; font-size: 17px; }
+.mp-sub.small { font-size: 13px; font-weight: 400; }
+`;
+
+/* Renders the current plasmid's map offscreen (always the full map, without selection/cursor) and returns {svg, width, height} */
+function buildMapSVG(doc) {
+  const tmp = el('div', { style: 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;visibility:hidden' });
+  document.body.append(tmp);
+  try {
+    if (doc.circular) renderCircular(doc, tmp); else renderLinear(doc, tmp);
+    const svg = tmp.querySelector('svg');
+    svg.querySelectorAll('.mp-sel, .mp-caret').forEach(n => n.remove());
+    if (doc.circular) svg.querySelectorAll('.mp-sub.small').forEach(n => n.remove());   // "… selected" caption
+    svg.querySelectorAll('.on').forEach(n => n.classList.remove('on'));
+    [svg, ...svg.querySelectorAll('*')].forEach(n => { for (const a of Array.from(n.attributes)) if (a.name.startsWith('data-')) n.removeAttribute(a.name); });
+    let w, h;
+    if (doc.circular) { w = CW; h = CH; svg.setAttribute('width', w); svg.setAttribute('height', h); }
+    else { w = +svg.getAttribute('width'); h = +svg.getAttribute('height'); svg.setAttribute('viewBox', `0 0 ${w} ${h}`); }
+    svg.removeAttribute('class'); svg.removeAttribute('preserveAspectRatio');
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.insertAdjacentHTML('afterbegin', `<style>${EXPORT_CSS}</style><rect width="100%" height="100%" fill="#ffffff"/>`);
+    return { svg: new XMLSerializer().serializeToString(svg), width: w, height: h };
+  } finally { tmp.remove(); }
+}
+function svgToPngBlob(svgText, w, h, scale = 2) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })), img = new Image();
+    img.onload = () => {
+      const c = el('canvas'); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); c.toBlob(b => (b ? resolve(b) : reject(new Error('PNG encoding failed'))), 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not rasterise the map')); };
+    img.src = url;
+  });
+}

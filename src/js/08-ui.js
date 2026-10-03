@@ -432,6 +432,14 @@ async function saveDoc(doc, saveAs = false) {
     doc.dirty = false; toast('Saved ' + fname); requestUpdate(true);
   } catch (e) { if (e.name !== 'AbortError') { doc.handle = null; downloadBlob(fname, text); doc.dirty = false; requestUpdate(true); } }
 }
+async function exportMapImage(doc, fmt) {
+  try {
+    const { svg, width, height } = buildMapSVG(doc), base = doc.name.replace(/[^\w.-]+/g, '_') + '_map';
+    if (fmt === 'svg') { downloadBlob(base + '.svg', svg, 'image/svg+xml'); toast('Exported ' + base + '.svg'); return; }
+    const png = await svgToPngBlob(svg, width, height, 2);
+    downloadBlob(base + '.png', png, 'image/png'); toast('Exported ' + base + '.png');
+  } catch (e) { toast('Map export failed: ' + e.message, 5000); }
+}
 function exportDoc(doc, fmt) {
   if (fmt === 'fasta') downloadBlob(doc.name + '.fasta', writeFasta(doc));
   else downloadBlob(doc.name + '.gb', writeGenBank(doc));
@@ -465,7 +473,7 @@ const actions = {
   toggleedit: () => { App.editing = !App.editing; toast(App.editing ? 'Sequence editing enabled' : 'Sequence editing disabled (features can still be edited)'); requestUpdate(true); },
   toggleside: () => { App.settings.sideOpen = !App.settings.sideOpen; saveSettings(); applyLayout(); requestUpdate(false); },
   theme: () => { const o = ['auto', 'light', 'dark']; App.settings.theme = o[(o.indexOf(App.settings.theme) + 1) % 3]; saveSettings(); applyTheme(); toast('Theme: ' + App.settings.theme); },
-  export: e => { const r = e.target.closest('button').getBoundingClientRect(); showMenu(r.left, r.bottom + 4, [{ label: 'Export GenBank (.gb)', action: () => App.cur && exportDoc(App.cur, 'gb') }, { label: 'Export FASTA (.fasta)', action: () => App.cur && exportDoc(App.cur, 'fasta') }, { label: 'Save as…', action: () => App.cur && saveDoc(App.cur, true) }]); },
+  export: e => { const r = e.target.closest('button').getBoundingClientRect(); showMenu(r.left, r.bottom + 4, [{ label: 'Export GenBank (.gb)', action: () => App.cur && exportDoc(App.cur, 'gb') }, { label: 'Export FASTA (.fasta)', action: () => App.cur && exportDoc(App.cur, 'fasta') }, '-', { label: 'Export map as SVG image…', action: () => App.cur && exportMapImage(App.cur, 'svg') }, { label: 'Export map as PNG image…', action: () => App.cur && exportMapImage(App.cur, 'png') }, '-', { label: 'Save as…', action: () => App.cur && saveDoc(App.cur, true) }]); },
   display: e => {
     const r = e.target.closest('button').getBoundingClientRect(), S = App.settings;
     const tog = (k, label) => ({ label, checked: S[k], action: () => { S[k] = !S[k]; saveSettings(); requestUpdate(true); } });
