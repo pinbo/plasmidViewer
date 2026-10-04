@@ -210,19 +210,26 @@ function contextMenu(e) {
   const doc = App.cur; if (!doc) return;
   e.preventDefault();
   const fe = e.target.closest('[data-fid]');
-  if (fe) { const f = doc.features.find(x => x.id === +fe.dataset.fid); if (f) selectFeature(doc, f); }
-  const sel = selRange(doc), f = fe && doc.features.find(x => x.id === +fe.dataset.fid), ro = !App.editing;
+  const hit = fe && featureById(doc, fe.dataset.fid);            // feature or ORF under the pointer
+  if (hit) selectFeature(doc, hit);
+  const sel = selRange(doc), f = hit && doc.features.includes(hit) ? hit : null, ro = !App.editing;
   const items = [
     { label: 'Cut', hint: MOD + 'X', disabled: !sel || ro, action: () => doCopy(doc, true) },
     { label: 'Copy', hint: MOD + 'C', disabled: !sel, action: () => doCopy(doc) },
     { label: 'Copy reverse complement', disabled: !sel, action: () => doCopyRC(doc) },
+    { label: 'Copy translation', disabled: !sel, action: () => copyTranslation(doc, false) },
+    { label: 'Copy translation on reverse strand', disabled: !sel, action: () => copyTranslation(doc, true) },
+    ...(hit && (hit.type === 'CDS' || hit.orf) ? [{ label: `Copy feature translation (${hit.name})`, action: () => copyFeatureTranslation(doc, hit) }] : []),
     { label: 'Paste', hint: MOD + 'V', disabled: ro, action: () => doPaste(doc) },
     { label: 'Paste reverse complement', disabled: ro, action: () => doPaste(doc, true) },
     { label: 'Delete', hint: '⌫', disabled: !sel || ro, action: () => deleteSelection(doc) }, '-',
     { label: 'Add feature from selection…', disabled: !sel, action: () => openFeatureDialog(doc) },
   ];
   if (f) items.push({ label: `Edit “${f.name}”…`, action: () => openFeatureDialog(doc, f) }, { label: `Delete feature “${f.name}”`, action: () => removeFeature(doc, f.id) });
-  items.push('-', { label: 'Reverse-complement selection', disabled: !sel || ro, action: () => reverseComplementRange(doc, ...sel) },
+  items.push('-', { label: 'To uppercase', disabled: !sel || ro, action: () => changeCase(doc, 'upper') },
+    { label: 'To lowercase', disabled: !sel || ro, action: () => changeCase(doc, 'lower') },
+    { label: 'Switch case', disabled: !sel || ro, action: () => changeCase(doc, 'swap') }, '-',
+    { label: 'Reverse-complement selection', disabled: !sel || ro, action: () => reverseComplementRange(doc, ...sel) },
     { label: 'Set origin here', disabled: !doc.circular || ro, action: () => setOrigin(doc, doc.caret) },
     { label: 'Insert sequence here…', disabled: ro, action: () => openInsertDialog(doc) },
     { label: 'Select all', hint: MOD + 'A', action: () => setSel(doc, 0, doc.seq.length) });

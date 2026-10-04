@@ -272,3 +272,30 @@ function warnNonATGC(text, where) {
   if (st.count) toast(`⚠ ${st.count.toLocaleString('en-US')} non-ATGC character${st.count > 1 ? 's' : ''} ${where} (${st.detail}) – highlighted in red in the sequence view`, 8000, 'warn');
   return st.count;
 }
+
+
+/* ----- case conversion (length-preserving, so features stay put) ----- */
+function changeCase(doc, mode) {
+  if (!App.editing) return lockedToast();
+  const r = selRange(doc); if (!r) return toast('Select some sequence first');
+  const t = doc.seq.slice(r[0], r[1]);
+  const nt = mode === 'upper' ? t.toUpperCase() : mode === 'lower' ? t.toLowerCase() : t.replace(/[a-z]/gi, c => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()));
+  if (nt === t) return toast('Nothing to change');
+  mutate(doc, () => { doc.seq = doc.seq.slice(0, r[0]) + nt + doc.seq.slice(r[1]); doc.anchor = r[0]; doc.caret = r[1]; });
+}
+
+/* ----- translations to the clipboard ----- */
+async function copyTranslation(doc, reverse) {
+  const r = selRange(doc); if (!r) return toast('Select some sequence first');
+  let s = seqU(doc).slice(r[0], r[1]); if (reverse) s = revcomp(s);
+  const p = translate(s);
+  if (!p) return toast('The selection is shorter than one codon');
+  await copyToSystem(p);
+  toast(`Copied ${p.length} aa (${reverse ? 'reverse strand' : 'forward strand'}, starting at the first selected base)`);
+}
+async function copyFeatureTranslation(doc, f) {
+  const p = cdsCodons(doc, f).map(c => c.aa).join('').replace(/\*$/, '');
+  if (!p) return toast('Nothing to translate');
+  await copyToSystem(p);
+  toast(`Copied the ${p.length}-aa translation of “${f.name}”`);
+}
