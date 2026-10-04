@@ -111,7 +111,14 @@ function detectCandidates(doc, lib, thr = 0.96) {
     h.present = doc.features.some(f => f.name.toLowerCase() === nm && locsOverlap(f.locs, h.locs));
     keep.push(h);
   }
-  return keep.sort((a, b) => a.locs[0][0] - b.locs[0][0]);
+  // entries sharing a `group` (e.g. the near-identical Gateway att sites) are mutually exclusive where they overlap: the best match wins
+  const groups = keep.filter(h => h.entry.group).sort((a, b) => b.identity - a.identity || b.len - a.len), won = [];
+  for (const h of groups) {
+    const clash = won.some(w => w.entry.group === h.entry.group && h.locs.some(([x, y]) => w.locs.some(([p, q]) => { const ov = Math.min(y, q) - Math.max(x, p); return ov > 0.3 * Math.min(y - x, q - p); })));
+    if (!clash) won.push(h);
+  }
+  const lose = new Set(groups.filter(h => !won.includes(h)));
+  return keep.filter(h => !lose.has(h)).sort((a, b) => a.locs[0][0] - b.locs[0][0]);
 }
 
 function candidateToFeature(h) {

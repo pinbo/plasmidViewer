@@ -302,3 +302,22 @@ body:not(.editing) .caret { background: var(--muted); animation: none; }
 .warnchip { border: 1px solid rgba(229,72,77,.6); background: rgba(229,72,77,.12); color: #c0392b; border-radius: 99px; padding: 0 10px; font: 700 11.5px var(--font); cursor: pointer; }
 .warnchip:hover { background: rgba(229,72,77,.25); }
 .warnchip[hidden] { display: none; }
+
+/* cloning dialog */
+.cloning { display: flex; flex-direction: column; gap: 10px; }
+.ctabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.ctab { border: 0; background: transparent; padding: 8px 14px; color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; }
+.ctab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.cpanel { display: flex; flex-direction: column; gap: 8px; }
+.partswrap h4 { margin: 4px 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.parts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.prow { display: flex; align-items: center; gap: 6px; }
+.prow select { flex: 1; min-width: 0; }
+.prow .pn { width: 14px; color: var(--muted); font-weight: 700; text-align: center; }
+.okline { color: #1f7a4a; background: rgba(46,184,114,.12); border: 1px solid rgba(46,184,114,.45); border-radius: 8px; padding: 6px 10px; font-weight: 600; }
+.ptablewrap { overflow-x: auto; }
+.ptable { border-collapse: collapse; width: 100%; font-size: 12px; }
+.ptable th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.ptable td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.pseq { word-break: break-all; min-width: 260px; }
+.pseq .tail { color: #d98200; font-weight: 700; }
