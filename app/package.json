@@ -11,7 +11,8 @@
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "dist:linux": "electron-builder --linux",
+    "postinstall": "node fix-electron.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -20,14 +21,58 @@
   "build": {
     "appId": "org.plasmidviewer.app",
     "productName": "Plasmid Viewer",
-    "files": ["main.js", "preload.js", "index.html", "package.json"],
-    "fileAssociations": [
-      { "ext": ["gb", "gbk", "gbff"], "name": "GenBank file", "role": "Editor" },
-      { "ext": ["fa", "fasta", "fna"], "name": "FASTA file", "role": "Editor" },
-      { "ext": ["dna"], "name": "SnapGene file", "role": "Viewer" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "package.json"
     ],
-    "mac": { "category": "public.app-category.education", "target": ["dmg", "zip"] },
-    "win": { "target": ["nsis", "portable"] },
-    "linux": { "target": ["AppImage", "deb"], "category": "Science" }
+    "fileAssociations": [
+      {
+        "ext": [
+          "gb",
+          "gbk",
+          "gbff"
+        ],
+        "name": "GenBank file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "fa",
+          "fasta",
+          "fna"
+        ],
+        "name": "FASTA file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "dna"
+        ],
+        "name": "SnapGene file",
+        "role": "Viewer"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Science"
+    }
   }
 }

@@ -21,6 +21,8 @@ npm run dist:mac     # → app/dist/*.dmg      (build on a Mac)
 npm run dist:win     # → app/dist/*.exe      (build on Windows, or Linux with wine)
 npm run dist:linux   # → app/dist/*.AppImage / *.deb
 ```
+> **Troubleshooting – "Electron failed to install correctly":** on very new Node versions (and with npm 11's blocked install scripts) Electron's own installer can finish without unpacking. `npm install` now runs `app/fix-electron.js`, which unpacks it for you; if you already hit the error, delete `app/node_modules` and run `npm install` again. Using a Node LTS release (20 or 22) also avoids it.
+
 The installers give you double-click-to-open for `.gb`, `.fasta` and `.dna`, and native save dialogs.
 
 ## Features
