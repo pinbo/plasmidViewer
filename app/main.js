@@ -3,6 +3,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron')
 const fs = require('fs');
 const path = require('path');
 
+const ICON = path.join(__dirname, 'build', 'icon.png');   // window / taskbar icon (Windows, Linux); also the dock icon when running with `npm start` on macOS
 let win;
 let pendingFiles = process.argv.slice(app.isPackaged ? 1 : 2).filter(f => /\.(gb|gbk|genbank|gbff|fa|fasta|fna|dna|seq|txt)$/i.test(f) && fs.existsSync(f));
 
@@ -15,7 +16,7 @@ function sendFile(file) {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1400, height: 900, minWidth: 900, minHeight: 600, title: 'Plasmid Viewer',
+    width: 1400, height: 900, minWidth: 900, minHeight: 600, title: 'Plasmid Viewer', icon: ICON,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   win.loadFile(path.join(__dirname, 'index.html'));
@@ -38,6 +39,7 @@ ipcMain.handle('save-file', async (_e, { name, text, existingPath }) => {
 app.on('open-file', (e, file) => { e.preventDefault(); if (win && win.webContents && !win.webContents.isLoading()) sendFile(file); else pendingFiles.push(file); });
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin' && app.dock && fs.existsSync(ICON)) app.dock.setIcon(ICON);
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
