@@ -68,12 +68,29 @@ function codonToAA(c) {
 function translate(s) { let o = ''; for (let i = 0; i + 2 < s.length; i += 3) o += codonToAA(s.substr(i, 3)); return o; }
 
 function gcPercent(s) { if (!s.length) return 0; let g = 0; for (const c of s) if (c === 'G' || c === 'C' || c === 'g' || c === 'c') g++; return 100 * g / s.length; }
-function meltingTemp(s) {
-  s = s.toUpperCase(); const n = s.length; if (!n) return 0;
-  let gc = 0, at = 0; for (const c of s) { if (c === 'G' || c === 'C') gc++; else if (c === 'A' || c === 'T') at++; }
-  if (n < 14) return 2 * at + 4 * gc;
-  return 64.9 + 41 * (gc - 16.4) / n;
+/* ---------- melting temperature: primer3 method ----------
+   SantaLucia 1998 nearest-neighbour thermodynamics + SantaLucia salt correction, with primer3's conversion of Mg2+/dNTP into an
+   equivalent monovalent concentration; oligos longer than 60 nt use primer3's long-sequence formula (as in oligotm.c / primer3-py). */
+const NN_PARAMS = { AA: [-7.9, -22.2], TT: [-7.9, -22.2], AT: [-7.2, -20.4], TA: [-7.2, -21.3], CA: [-8.5, -22.7], TG: [-8.5, -22.7], GT: [-8.4, -22.4], AC: [-8.4, -22.4],
+  CT: [-7.8, -21.0], AG: [-7.8, -21.0], GA: [-8.2, -22.2], TC: [-8.2, -22.2], CG: [-10.6, -27.2], GC: [-9.8, -24.4], GG: [-8.0, -19.9], CC: [-8.0, -19.9] };
+const TM_DEFAULTS = { mv: 50, dv: 1.5, dntp: 0.6, dna: 50 };    // mM Na+/K+, mM Mg2+, mM dNTP, nM oligo (primer3 defaults)
+const tmConf = () => Object.assign({}, TM_DEFAULTS, store.get('tmConf', {}));
+function tmPrimer3(seq, c = tmConf()) {
+  const s = String(seq).toUpperCase(), n = s.length;
+  if (n < 2 || /[^ACGT]/.test(s)) return NaN;
+  let dv = c.dv, dntp = c.dntp; if (dv === 0) dntp = 0; if (dv < dntp) dv = dntp;
+  const mv = c.mv + (dv > 0 ? 120 * Math.sqrt(dv - dntp) : 0);                     // equivalent monovalent salt, mM
+  if (n > 60) { let gc = 0; for (const ch of s) if (ch === 'G' || ch === 'C') gc++; return 81.5 + 16.6 * Math.log10(mv / 1000) + 41 * gc / n - 600 / n; }
+  let H = 0, S = 0;
+  for (let i = 0; i < n - 1; i++) { const v = NN_PARAMS[s.substr(i, 2)]; H += v[0]; S += v[1]; }
+  for (const ch of [s[0], s[n - 1]]) { if (ch === 'G' || ch === 'C') { H += 0.1; S -= 2.8; } else { H += 2.3; S += 4.1; } }
+  const sym = s === revcomp(s); if (sym) S -= 1.4;
+  S += 0.368 * (n - 1) * Math.log(mv / 1000);
+  return H * 1000 / (S + 1.9872 * Math.log(c.dna * 1e-9 / (sym ? 1 : 4))) - 273.15;
 }
+const meltingTemp = s => tmPrimer3(s);
+const fmtTm = t => (Number.isFinite(t) ? t.toFixed(1) + ' °C' : '—');
+const tmConfText = (c = tmConf()) => `primer3 method · ${c.mv} mM Na⁺, ${c.dv} mM Mg²⁺, ${c.dntp} mM dNTP, ${c.dna} nM oligo`;
 
 /* ---------- feature colours / types ---------- */
 const TYPE_COLORS = {

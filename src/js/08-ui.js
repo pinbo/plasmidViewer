@@ -55,7 +55,7 @@ function renderStatus(doc) {
   const sel = selRange(doc), n = doc.seq.length; let left;
   if (sel) {
     const s = doc.seq.slice(sel[0], sel[1]);
-    left = `Selected ${sel[0] + 1}..${sel[1]} · ${fmtBp(s.length)} · GC ${gcPercent(s).toFixed(1)}% · Tm ${meltingTemp(s).toFixed(1)}°C`;
+    left = `Selected ${sel[0] + 1}..${sel[1]} · ${fmtBp(s.length)} · GC ${gcPercent(s).toFixed(1)}% · Tm ${fmtTm(meltingTemp(s))}`;
   } else left = `Cursor after base ${doc.caret.toLocaleString('en-US')}`;
   if (UI.find.q) { const h = UI.find.res[UI.find.idx]; left += ` · Find: ${UI.find.res.length ? `${UI.find.idx >= 0 ? UI.find.idx + 1 : '–'} of ${UI.find.res.length}` : 'no matches'}${h ? (h.strand === 1 ? ' · forward strand (top)' : ' · reverse strand (bottom)') : ''}`; }
   $('#stLeft').textContent = left;
@@ -147,7 +147,8 @@ function renderInfo(doc, body) {
     row('Length', fmtBp(doc.seq.length)), row('GC content', gcPercent(doc.seq).toFixed(1) + '%'), row('Features', String(doc.features.length)),
     row('Unique cutters', String([...analyzeEnzymes(doc).values()].filter(r => r.cuts.length === 1).length)),
     el('h4', {}, 'Selection'),
-    sel ? el('div', {}, row('Range', `${sel[0] + 1}..${sel[1]}`), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm (basic)', meltingTemp(s).toFixed(1) + ' °C'),
+    sel ? el('div', {}, row('Range', `${sel[0] + 1}..${sel[1]}`), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm (primer3)', fmtTm(meltingTemp(s))),
+      el('div', { class: 'small-note' }, tmConfText(), ' · ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'change')),
       el('div', { class: 'mono wrap' }, el('small', {}, 'Translation (frame 1)'), el('div', {}, translate(s).slice(0, 400) || '—'))) : el('div', { class: 'empty-note' }, 'Nothing selected.'),
     el('h4', {}, 'Tools'),
     el('div', { class: 'btnrow' },
@@ -379,6 +380,19 @@ function liveWarn(ta) {
   const line = el('div', { class: 'warnline' });
   const upd = () => { const st = nonATGCStats(cleanSeq(ta.value)); line.textContent = st.count ? `⚠ ${st.count.toLocaleString('en-US')} non-ATGC character${st.count > 1 ? 's' : ''} (${st.detail}) – they will be kept and highlighted in red` : ''; line.style.display = st.count ? 'block' : 'none'; };
   ta.addEventListener('input', upd); upd(); return line;
+}
+
+/* Tm conditions (primer3 parameters) */
+function openTmDialog() {
+  const c = tmConf(), num = (v, step) => el('input', { type: 'number', min: 0, step, value: v });
+  const mv = num(c.mv, 1), dv = num(c.dv, 0.1), dntp = num(c.dntp, 0.1), dna = num(c.dna, 10);
+  const body = el('div', { class: 'form' },
+    el('div', { class: 'two' }, field('Monovalent cations, Na⁺/K⁺ (mM)', mv), field('Divalent cations, Mg²⁺ (mM)', dv)),
+    el('div', { class: 'two' }, field('dNTPs (mM)', dntp), field('Oligo concentration (nM)', dna)),
+    el('div', { class: 'small-note' }, 'Tm is calculated as in primer3 (SantaLucia 1998 nearest-neighbour thermodynamics and salt correction; Mg²⁺ is converted to an equivalent monovalent concentration; sequences over 60 nt use primer3’s GC-content formula). Defaults match primer3: 50 mM, 1.5 mM, 0.6 mM, 50 nM.'));
+  openModal('Tm settings', body, [{ label: 'Defaults', action: () => { store.set('tmConf', {}); requestUpdate(true); toast('Tm conditions reset'); } }, { label: 'Cancel' }, { label: 'Save', primary: true, action: () => {
+    store.set('tmConf', { mv: Math.max(0, +mv.value || 0), dv: Math.max(0, +dv.value || 0), dntp: Math.max(0, +dntp.value || 0), dna: Math.max(1, +dna.value || 50) }); requestUpdate(true);
+    } }]);
 }
 
 function openInsertDialog(doc) {

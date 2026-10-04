@@ -3,17 +3,7 @@
    Every design works on opened plasmids and returns the final plasmid (sequence + carried-over features) plus the primers. */
 
 /* ===== primer helpers ===== */
-const NN_PARAMS = { AA: [-7.9, -22.2], TT: [-7.9, -22.2], AT: [-7.2, -20.4], TA: [-7.2, -21.3], CA: [-8.5, -22.7], TG: [-8.5, -22.7], GT: [-8.4, -22.4], AC: [-8.4, -22.4],
-  CT: [-7.8, -21.0], AG: [-7.8, -21.0], GA: [-8.2, -22.2], TC: [-8.2, -22.2], CG: [-10.6, -27.2], GC: [-9.8, -24.4], GG: [-8.0, -19.9], CC: [-8.0, -19.9] };
-/* nearest-neighbour Tm (SantaLucia 1998), 50 mM Na+, 250 nM primer */
-function primerTm(seq) {
-  seq = seq.toUpperCase().replace(/[^ACGT]/g, ''); const n = seq.length; if (n < 2) return 0;
-  let H = 0, S = 0;
-  for (let i = 0; i < n - 1; i++) { const v = NN_PARAMS[seq.substr(i, 2)]; H += v[0]; S += v[1]; }
-  for (const c of [seq[0], seq[n - 1]]) { if (c === 'G' || c === 'C') { H += 0.1; S -= 2.8; } else { H += 2.3; S += 4.1; } }
-  S += 0.368 * (n - 1) * Math.log(0.05);
-  return H * 1000 / (S + 1.987 * Math.log(250e-9 / 4)) - 273.15;
-}
+const primerTm = seq => { const t = tmPrimer3(seq); return Number.isFinite(t) ? t : 0; };   // primer3-method Tm (conditions: see Tm settings)
 /* gene-specific 5' part of a primer: shortest 18–40 nt stretch reaching the target Tm, preferring a G/C 3' end */
 function pickGS(seq, target) {
   seq = seq.toUpperCase();
@@ -385,18 +375,19 @@ function openCloningDialog() {
       const tbl = el('table', { class: 'ptable' }, el('tr', {}, ['Primer', "Sequence (5′→3′)", 'Length', 'Tm of binding part'].map(h => el('th', {}, h))));
       for (const p of d.primers) {
         const tail = p.seq.slice(0, p.seq.length - p.gs.length);
-        tbl.append(el('tr', {}, el('td', {}, el('b', {}, p.name)), el('td', { class: 'mono pseq' }, tail ? el('span', { class: 'tail' }, tail) : '', p.gs), el('td', {}, p.seq.length + ' nt'), el('td', {}, primerTm(p.gs).toFixed(1) + ' °C')));
+        tbl.append(el('tr', {}, el('td', {}, el('b', {}, p.name)), el('td', { class: 'mono pseq' }, tail ? el('span', { class: 'tail' }, tail) : '', p.gs), el('td', {}, p.seq.length + ' nt'), el('td', {}, fmtTm(tmPrimer3(p.gs)))));
       }
-      out.append(el('div', { class: 'ptablewrap' }, tbl), el('div', { class: 'small-note' }, 'Coloured part = 5′ extension (homology / enzyme site / att site); black = gene-specific binding part. Tm: nearest-neighbour, 50 mM Na⁺, 250 nM primer.'));
+      out.append(el('div', { class: 'ptablewrap' }, tbl), el('div', { class: 'small-note' }, 'Coloured part = 5′ extension (homology / enzyme site / att site); black = gene-specific binding part. Tm: ' + tmConfText() + '.'));
     }
-    const csv = () => 'Name,Sequence,Length,Tm\n' + d.primers.map(p => `${p.name},${p.seq},${p.seq.length},${primerTm(p.gs).toFixed(1)}`).join('\n');
+    const csv = () => 'Name,Sequence,Length,Tm\n' + d.primers.map(p => `${p.name},${p.seq},${p.seq.length},${fmtTm(tmPrimer3(p.gs)).replace(' °C', '')}`).join('\n');
     out.append(el('div', { class: 'btnrow' },
       el('button', { class: 'btn primary', onclick: () => { const doc = addDoc({ name: d.name, seq: d.seq, circular: d.circular, features: d.features, meta: { definition: `Designed with Plasmid Viewer – ${d.method}` } }); doc.dirty = true; toast(`Created “${doc.name}”`); if (modal) modal.close(); } }, 'Create plasmid in a new tab'),
       d.primers.length ? el('button', { class: 'btn', onclick: async () => { await copyToSystem(d.primers.map(p => `${p.name}\t${p.seq}`).join('\n')); toast('Primers copied'); } }, 'Copy primers') : null,
       d.primers.length ? el('button', { class: 'btn', onclick: () => downloadBlob(d.name + '_primers.csv', csv(), 'text/csv') }, 'Download primers (CSV)') : null));
   };
 
-  const body = el('div', { class: 'cloning' }, tabs, panel, partsWrap, el('div', { class: 'btnrow' }, el('button', { class: 'btn primary', onclick: run }, 'Design')), out);
+  const tmLine = el('div', { class: 'small-note' }, 'Primer Tm: ' + tmConfText() + '  ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'change conditions'), ' (applies to the next design).');
+  const body = el('div', { class: 'cloning' }, tabs, panel, tmLine, partsWrap, el('div', { class: 'btnrow' }, el('button', { class: 'btn primary', onclick: run }, 'Design')), out);
   addPart(); setMethod('homology');
   modal = openModal('Cloning tools', body, [{ label: 'Close' }], { wide: true });
 }

@@ -475,12 +475,29 @@ function codonToAA(c) {
 function translate(s) { let o = ''; for (let i = 0; i + 2 < s.length; i += 3) o += codonToAA(s.substr(i, 3)); return o; }
 
 function gcPercent(s) { if (!s.length) return 0; let g = 0; for (const c of s) if (c === 'G' || c === 'C' || c === 'g' || c === 'c') g++; return 100 * g / s.length; }
-function meltingTemp(s) {
-  s = s.toUpperCase(); const n = s.length; if (!n) return 0;
-  let gc = 0, at = 0; for (const c of s) { if (c === 'G' || c === 'C') gc++; else if (c === 'A' || c === 'T') at++; }
-  if (n < 14) return 2 * at + 4 * gc;
-  return 64.9 + 41 * (gc - 16.4) / n;
+/* ---------- melting temperature: primer3 method ----------
+   SantaLucia 1998 nearest-neighbour thermodynamics + SantaLucia salt correction, with primer3's conversion of Mg2+/dNTP into an
+   equivalent monovalent concentration; oligos longer than 60 nt use primer3's long-sequence formula (as in oligotm.c / primer3-py). */
+const NN_PARAMS = { AA: [-7.9, -22.2], TT: [-7.9, -22.2], AT: [-7.2, -20.4], TA: [-7.2, -21.3], CA: [-8.5, -22.7], TG: [-8.5, -22.7], GT: [-8.4, -22.4], AC: [-8.4, -22.4],
+  CT: [-7.8, -21.0], AG: [-7.8, -21.0], GA: [-8.2, -22.2], TC: [-8.2, -22.2], CG: [-10.6, -27.2], GC: [-9.8, -24.4], GG: [-8.0, -19.9], CC: [-8.0, -19.9] };
+const TM_DEFAULTS = { mv: 50, dv: 1.5, dntp: 0.6, dna: 50 };    // mM Na+/K+, mM Mg2+, mM dNTP, nM oligo (primer3 defaults)
+const tmConf = () => Object.assign({}, TM_DEFAULTS, store.get('tmConf', {}));
+function tmPrimer3(seq, c = tmConf()) {
+  const s = String(seq).toUpperCase(), n = s.length;
+  if (n < 2 || /[^ACGT]/.test(s)) return NaN;
+  let dv = c.dv, dntp = c.dntp; if (dv === 0) dntp = 0; if (dv < dntp) dv = dntp;
+  const mv = c.mv + (dv > 0 ? 120 * Math.sqrt(dv - dntp) : 0);                     // equivalent monovalent salt, mM
+  if (n > 60) { let gc = 0; for (const ch of s) if (ch === 'G' || ch === 'C') gc++; return 81.5 + 16.6 * Math.log10(mv / 1000) + 41 * gc / n - 600 / n; }
+  let H = 0, S = 0;
+  for (let i = 0; i < n - 1; i++) { const v = NN_PARAMS[s.substr(i, 2)]; H += v[0]; S += v[1]; }
+  for (const ch of [s[0], s[n - 1]]) { if (ch === 'G' || ch === 'C') { H += 0.1; S -= 2.8; } else { H += 2.3; S += 4.1; } }
+  const sym = s === revcomp(s); if (sym) S -= 1.4;
+  S += 0.368 * (n - 1) * Math.log(mv / 1000);
+  return H * 1000 / (S + 1.9872 * Math.log(c.dna * 1e-9 / (sym ? 1 : 4))) - 273.15;
 }
+const meltingTemp = s => tmPrimer3(s);
+const fmtTm = t => (Number.isFinite(t) ? t.toFixed(1) + ' °C' : '—');
+const tmConfText = (c = tmConf()) => `primer3 method · ${c.mv} mM Na⁺, ${c.dv} mM Mg²⁺, ${c.dntp} mM dNTP, ${c.dna} nM oligo`;
 
 /* ---------- feature colours / types ---------- */
 const TYPE_COLORS = {
@@ -2431,7 +2448,7 @@ function renderStatus(doc) {
   const sel = selRange(doc), n = doc.seq.length; let left;
   if (sel) {
     const s = doc.seq.slice(sel[0], sel[1]);
-    left = `Selected ${sel[0] + 1}..${sel[1]} · ${fmtBp(s.length)} · GC ${gcPercent(s).toFixed(1)}% · Tm ${meltingTemp(s).toFixed(1)}°C`;
+    left = `Selected ${sel[0] + 1}..${sel[1]} · ${fmtBp(s.length)} · GC ${gcPercent(s).toFixed(1)}% · Tm ${fmtTm(meltingTemp(s))}`;
   } else left = `Cursor after base ${doc.caret.toLocaleString('en-US')}`;
   if (UI.find.q) { const h = UI.find.res[UI.find.idx]; left += ` · Find: ${UI.find.res.length ? `${UI.find.idx >= 0 ? UI.find.idx + 1 : '–'} of ${UI.find.res.length}` : 'no matches'}${h ? (h.strand === 1 ? ' · forward strand (top)' : ' · reverse strand (bottom)') : ''}`; }
   $('#stLeft').textContent = left;
@@ -2523,7 +2540,8 @@ function renderInfo(doc, body) {
     row('Length', fmtBp(doc.seq.length)), row('GC content', gcPercent(doc.seq).toFixed(1) + '%'), row('Features', String(doc.features.length)),
     row('Unique cutters', String([...analyzeEnzymes(doc).values()].filter(r => r.cuts.length === 1).length)),
     el('h4', {}, 'Selection'),
-    sel ? el('div', {}, row('Range', `${sel[0] + 1}..${sel[1]}`), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm (basic)', meltingTemp(s).toFixed(1) + ' °C'),
+    sel ? el('div', {}, row('Range', `${sel[0] + 1}..${sel[1]}`), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm (primer3)', fmtTm(meltingTemp(s))),
+      el('div', { class: 'small-note' }, tmConfText(), ' · ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'change')),
       el('div', { class: 'mono wrap' }, el('small', {}, 'Translation (frame 1)'), el('div', {}, translate(s).slice(0, 400) || '—'))) : el('div', { class: 'empty-note' }, 'Nothing selected.'),
     el('h4', {}, 'Tools'),
     el('div', { class: 'btnrow' },
@@ -2755,6 +2773,19 @@ function liveWarn(ta) {
   const line = el('div', { class: 'warnline' });
   const upd = () => { const st = nonATGCStats(cleanSeq(ta.value)); line.textContent = st.count ? `⚠ ${st.count.toLocaleString('en-US')} non-ATGC character${st.count > 1 ? 's' : ''} (${st.detail}) – they will be kept and highlighted in red` : ''; line.style.display = st.count ? 'block' : 'none'; };
   ta.addEventListener('input', upd); upd(); return line;
+}
+
+/* Tm conditions (primer3 parameters) */
+function openTmDialog() {
+  const c = tmConf(), num = (v, step) => el('input', { type: 'number', min: 0, step, value: v });
+  const mv = num(c.mv, 1), dv = num(c.dv, 0.1), dntp = num(c.dntp, 0.1), dna = num(c.dna, 10);
+  const body = el('div', { class: 'form' },
+    el('div', { class: 'two' }, field('Monovalent cations, Na⁺/K⁺ (mM)', mv), field('Divalent cations, Mg²⁺ (mM)', dv)),
+    el('div', { class: 'two' }, field('dNTPs (mM)', dntp), field('Oligo concentration (nM)', dna)),
+    el('div', { class: 'small-note' }, 'Tm is calculated as in primer3 (SantaLucia 1998 nearest-neighbour thermodynamics and salt correction; Mg²⁺ is converted to an equivalent monovalent concentration; sequences over 60 nt use primer3’s GC-content formula). Defaults match primer3: 50 mM, 1.5 mM, 0.6 mM, 50 nM.'));
+  openModal('Tm settings', body, [{ label: 'Defaults', action: () => { store.set('tmConf', {}); requestUpdate(true); toast('Tm conditions reset'); } }, { label: 'Cancel' }, { label: 'Save', primary: true, action: () => {
+    store.set('tmConf', { mv: Math.max(0, +mv.value || 0), dv: Math.max(0, +dv.value || 0), dntp: Math.max(0, +dntp.value || 0), dna: Math.max(1, +dna.value || 50) }); requestUpdate(true);
+    } }]);
 }
 
 function openInsertDialog(doc) {
@@ -3211,17 +3242,7 @@ document.addEventListener('DOMContentLoaded', init);
    Every design works on opened plasmids and returns the final plasmid (sequence + carried-over features) plus the primers. */
 
 /* ===== primer helpers ===== */
-const NN_PARAMS = { AA: [-7.9, -22.2], TT: [-7.9, -22.2], AT: [-7.2, -20.4], TA: [-7.2, -21.3], CA: [-8.5, -22.7], TG: [-8.5, -22.7], GT: [-8.4, -22.4], AC: [-8.4, -22.4],
-  CT: [-7.8, -21.0], AG: [-7.8, -21.0], GA: [-8.2, -22.2], TC: [-8.2, -22.2], CG: [-10.6, -27.2], GC: [-9.8, -24.4], GG: [-8.0, -19.9], CC: [-8.0, -19.9] };
-/* nearest-neighbour Tm (SantaLucia 1998), 50 mM Na+, 250 nM primer */
-function primerTm(seq) {
-  seq = seq.toUpperCase().replace(/[^ACGT]/g, ''); const n = seq.length; if (n < 2) return 0;
-  let H = 0, S = 0;
-  for (let i = 0; i < n - 1; i++) { const v = NN_PARAMS[seq.substr(i, 2)]; H += v[0]; S += v[1]; }
-  for (const c of [seq[0], seq[n - 1]]) { if (c === 'G' || c === 'C') { H += 0.1; S -= 2.8; } else { H += 2.3; S += 4.1; } }
-  S += 0.368 * (n - 1) * Math.log(0.05);
-  return H * 1000 / (S + 1.987 * Math.log(250e-9 / 4)) - 273.15;
-}
+const primerTm = seq => { const t = tmPrimer3(seq); return Number.isFinite(t) ? t : 0; };   // primer3-method Tm (conditions: see Tm settings)
 /* gene-specific 5' part of a primer: shortest 18–40 nt stretch reaching the target Tm, preferring a G/C 3' end */
 function pickGS(seq, target) {
   seq = seq.toUpperCase();
@@ -3593,18 +3614,19 @@ function openCloningDialog() {
       const tbl = el('table', { class: 'ptable' }, el('tr', {}, ['Primer', "Sequence (5′→3′)", 'Length', 'Tm of binding part'].map(h => el('th', {}, h))));
       for (const p of d.primers) {
         const tail = p.seq.slice(0, p.seq.length - p.gs.length);
-        tbl.append(el('tr', {}, el('td', {}, el('b', {}, p.name)), el('td', { class: 'mono pseq' }, tail ? el('span', { class: 'tail' }, tail) : '', p.gs), el('td', {}, p.seq.length + ' nt'), el('td', {}, primerTm(p.gs).toFixed(1) + ' °C')));
+        tbl.append(el('tr', {}, el('td', {}, el('b', {}, p.name)), el('td', { class: 'mono pseq' }, tail ? el('span', { class: 'tail' }, tail) : '', p.gs), el('td', {}, p.seq.length + ' nt'), el('td', {}, fmtTm(tmPrimer3(p.gs)))));
       }
-      out.append(el('div', { class: 'ptablewrap' }, tbl), el('div', { class: 'small-note' }, 'Coloured part = 5′ extension (homology / enzyme site / att site); black = gene-specific binding part. Tm: nearest-neighbour, 50 mM Na⁺, 250 nM primer.'));
+      out.append(el('div', { class: 'ptablewrap' }, tbl), el('div', { class: 'small-note' }, 'Coloured part = 5′ extension (homology / enzyme site / att site); black = gene-specific binding part. Tm: ' + tmConfText() + '.'));
     }
-    const csv = () => 'Name,Sequence,Length,Tm\n' + d.primers.map(p => `${p.name},${p.seq},${p.seq.length},${primerTm(p.gs).toFixed(1)}`).join('\n');
+    const csv = () => 'Name,Sequence,Length,Tm\n' + d.primers.map(p => `${p.name},${p.seq},${p.seq.length},${fmtTm(tmPrimer3(p.gs)).replace(' °C', '')}`).join('\n');
     out.append(el('div', { class: 'btnrow' },
       el('button', { class: 'btn primary', onclick: () => { const doc = addDoc({ name: d.name, seq: d.seq, circular: d.circular, features: d.features, meta: { definition: `Designed with Plasmid Viewer – ${d.method}` } }); doc.dirty = true; toast(`Created “${doc.name}”`); if (modal) modal.close(); } }, 'Create plasmid in a new tab'),
       d.primers.length ? el('button', { class: 'btn', onclick: async () => { await copyToSystem(d.primers.map(p => `${p.name}\t${p.seq}`).join('\n')); toast('Primers copied'); } }, 'Copy primers') : null,
       d.primers.length ? el('button', { class: 'btn', onclick: () => downloadBlob(d.name + '_primers.csv', csv(), 'text/csv') }, 'Download primers (CSV)') : null));
   };
 
-  const body = el('div', { class: 'cloning' }, tabs, panel, partsWrap, el('div', { class: 'btnrow' }, el('button', { class: 'btn primary', onclick: run }, 'Design')), out);
+  const tmLine = el('div', { class: 'small-note' }, 'Primer Tm: ' + tmConfText() + '  ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'change conditions'), ' (applies to the next design).');
+  const body = el('div', { class: 'cloning' }, tabs, panel, tmLine, partsWrap, el('div', { class: 'btnrow' }, el('button', { class: 'btn primary', onclick: run }, 'Design')), out);
   addPart(); setMethod('homology');
   modal = openModal('Cloning tools', body, [{ label: 'Close' }], { wide: true });
 }
