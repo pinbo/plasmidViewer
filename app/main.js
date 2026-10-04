@@ -9,7 +9,7 @@ let pendingFiles = process.argv.slice(app.isPackaged ? 1 : 2).filter(f => /\.(gb
 function sendFile(file) {
   try {
     const data = fs.readFileSync(file).toString('base64');
-    win.webContents.send('open-file', { name: path.basename(file), data, path: /\.dna$/i.test(file) ? null : file });
+    win.webContents.send('open-file', { name: path.basename(file), data, path: /\.(gb|gbk|genbank|gbff)$/i.test(file) ? file : null });   // only GenBank files are saved back in place
   } catch (e) { dialog.showErrorBox('Could not open file', String(e.message || e)); }
 }
 

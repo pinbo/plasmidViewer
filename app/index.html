@@ -2928,17 +2928,30 @@ function runFind(dir) {
 }
 
 /* ===== file I/O ===== */
-async function openFiles(files) {
-  for (const file of files) {
+/* Only GenBank files are saved back in place (Save always writes GenBank – FASTA / SnapGene files get a "Save as" instead) */
+const isGenBankName = n => /\.(gb|gbk|genbank|gbff)$/i.test(n);
+async function openFiles(files, handles) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
     try {
       const buf = await file.arrayBuffer();
       const d = parseAny(buf, file.name);
       const doc = addDoc(d, { detect: true }); warnNonATGC(doc.seq, `in ${file.name}`);
       if (doc.features.length && !d.features.length) doc.dirty = false;
+      if (isGenBankName(file.name)) {
+        if (window.plasmidNative && window.plasmidNative.pathForFile) doc.path = window.plasmidNative.pathForFile(file) || undefined;   // desktop app
+        if (handles && handles[i]) doc.handle = handles[i];                                                                              // Chrome / Edge
+      }
     } catch (e) { toast(`${file.name}: ${e.message}`, 5000); }
   }
 }
-function pickFiles() {
+async function pickFiles() {
+  if (window.showOpenFilePicker && !window.plasmidNative) {   // File System Access API keeps a handle, so Save can overwrite the original
+    try {
+      const hs = await window.showOpenFilePicker({ multiple: true, types: [{ description: 'Sequence files', accept: { 'text/plain': ['.gb', '.gbk', '.genbank', '.gbff', '.fasta', '.fa', '.fna', '.fas', '.txt', '.seq'], 'application/octet-stream': ['.dna'] } }] });
+      return openFiles(await Promise.all(hs.map(h => h.getFile())), hs);
+    } catch (e) { if (e.name === 'AbortError') return; /* otherwise fall back to the classic file input */ }
+  }
   const i = el('input', { type: 'file', multiple: true, accept: '.gb,.gbk,.genbank,.gbff,.fasta,.fa,.fna,.fas,.dna,.txt,.seq' });
   i.onchange = () => openFiles(Array.from(i.files)); i.click();
 }
@@ -2954,7 +2967,7 @@ async function saveDoc(doc, saveAs = false) {
       const w = await doc.handle.createWritable(); await w.write(text); await w.close();
       doc.name = doc.name;
     } else downloadBlob(fname, text);
-    doc.dirty = false; toast('Saved ' + fname); requestUpdate(true);
+    doc.dirty = false; toast('Saved ' + (doc.path ? doc.path.split(/[\\/]/).pop() : fname)); requestUpdate(true);
   } catch (e) { if (e.name !== 'AbortError') { doc.handle = null; downloadBlob(fname, text); doc.dirty = false; requestUpdate(true); } }
 }
 async function exportMapImage(doc, fmt) {
