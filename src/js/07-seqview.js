@@ -114,7 +114,7 @@ function renderSeq(doc, force) {
       const by = top + (tr ? 10 : 0), bg = f.ext ? tint(f.color, 0.22) : f.color, fg = f.ext ? 'var(--text)' : textOn(f.color);
       b.push(`<div class="${cls}" data-fid="${fid}" style="left:${f2(left)}px;top:${by}px;width:${f2(w)}px;background:${bg};color:${fg}${f.ext ? ';outline-color:' + f.color : ''}">${inner}</div>`);
       if (f.ext) {
-        const label = f.name + (f.stopped ? '' : ' (no stop codon found)');
+        const label = f.name + (f.stopped ? '' : f.endCds ? ` (until CDS “${f.endCds}”)` : ' (no stop codon found)');
         b.push(`<div class="extline${o.arrR ? ' hr' : ''}${o.arrL ? ' hl' : ''}" style="left:${f2(left)}px;top:${by + 21}px;width:${f2(w)}px;--ecol:${f.color}">${w > textWidth(label, '600 9.5px system-ui') + 34 ? `<span class="extlbl">${esc(label)}</span>` : ''}</div>`);
       }
     }
