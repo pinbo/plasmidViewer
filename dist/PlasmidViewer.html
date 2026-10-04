@@ -626,10 +626,18 @@ function parseGenBank(text) {
     if (loc && cur.key !== 'source') {
       const first = k => (q[k] && q[k][0]) || '';
       const name = first('label') || first('ApEinfo_label') || first('gene') || first('product') || first('standard_name') || (first('note') || '').slice(0, 40) || cur.key;
-      const color = first('ApEinfo_fwdcolor') || first('ApEinfo_revcolor') || first('color') || first('colour');
+      let color = first('ApEinfo_fwdcolor') || first('ApEinfo_revcolor') || first('color') || first('colour');
       const keep = {};
       for (const k of Object.keys(q)) if (!/^(label|ApEinfo_|translation|color|colour)/.test(k)) keep[k] = q[k];
-      doc.features.push({ name, type: cur.key, strand: loc.strand, locs: loc.locs, color: /^#[0-9a-f]{6}$/i.test(color) ? color : '', quals: keep });
+      // SnapGene stores display info inside /note, e.g. /note="color: #ccffcc; direction: RIGHT" – pick the colour up and keep the rest of the note
+      if (keep.note) {
+        keep.note = keep.note.map(t => {
+          t = t.replace(/\bcolou?r:\s*#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b;?\s*/gi, (_, h) => { if (!/^#[0-9a-f]{6}$/i.test(color)) color = '#' + (h.length === 3 ? h.replace(/./g, c => c + c) : h); return ''; });
+          return t.replace(/\bdirection:\s*\w+;?\s*/gi, '').replace(/^[\s;]+|[\s;]+$/g, '');
+        }).filter(Boolean);
+        if (!keep.note.length) delete keep.note;
+      }
+      doc.features.push({ name, type: cur.key, strand: loc.strand, locs: loc.locs, color: /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : '', quals: keep });
     }
     cur = null;
   };
