@@ -38,7 +38,7 @@ function renderSeq(doc, force) {
       for (let r = Math.floor(a / bpr); r <= Math.floor((b - 1) / bpr); r++) {
         const rs = r * bpr, x = Math.max(a, rs), y = Math.min(b, rs + bpr);
         const head = f.strand !== 0 && i === headSeg;
-        rowFeat[r].push({ f, lane: k, x, y, arrR: head && f.strand === 1 && y === b, arrL: head && f.strand === -1 && x === a });
+        rowFeat[r].push({ f, lane: k, x, y, a, b, arrR: head && f.strand === 1 && y === b, arrL: head && f.strand === -1 && x === a });
       }
     });
     for (const [a, b] of hangSegs(f, n)) for (let r = Math.floor(a / bpr); r <= Math.floor((b - 1) / bpr); r++) rowFeat[r].push({ f, lane: k, x: Math.max(a, r * bpr), y: Math.min(b, (r + 1) * bpr), hang: true });
@@ -94,6 +94,11 @@ function renderSeq(doc, force) {
       if (rowOf(e.bot) === r) b.push(zig(xt, (e.bot - rs) * cw, 'full', e)); else b.push(zig(xt, xt, 'top', e));
     }
     for (const e of rowBot[r]) if (rowOf(e.top) !== r) { const xb = Math.min(e.bot - rs, len) * cw; b.push(zig(xb, xb, 'bot', e)); }
+    for (const o of rowFeat[r]) {   // red [ ] marking the feature's range on the sequence while it is hovered
+      if (o.hang || o.f.ext) continue;
+      const l = o.x === o.a, rr = o.y === o.b;
+      b.push(`<div class="fbrk${l ? ' bl' : ''}${rr ? ' br' : ''}" data-fid="${o.f.id}" style="left:${f2((o.x - rs) * cw - 1)}px;width:${f2((o.y - o.x) * cw + 2)}px;top:${eH}px;height:${2 * SV.lineH}px"></div>`);
+    }
     b.push(`<div class="selLayer" style="top:${eH}px;height:${2 * SV.lineH}px"></div>`);
     const fy0 = eH + 2 * SV.lineH + 6;
     for (const o of rowFeat[r]) {
