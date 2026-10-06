@@ -29,7 +29,7 @@ function renderSeq(doc, force) {
   const showTrans = App.settings.showTrans;
   const feats = visibleFeatures(doc);
   if (showTrans) for (const f of visibleFeatures(doc)) { if (f.type === 'CDS' && !f.orf) { const x = cdsExtension(doc, f); if (x) feats.push(x); } }
-  const { lane } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs })), 0);
+  const { lane } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), 0);
   const isTrans = f => showTrans && (f.type === 'CDS' || f.orf);
   const rowFeat = Array.from({ length: rows }, () => []);
   for (const f of feats) {
@@ -41,6 +41,7 @@ function renderSeq(doc, force) {
         rowFeat[r].push({ f, lane: k, x, y, arrR: head && f.strand === 1 && y === b, arrL: head && f.strand === -1 && x === a });
       }
     });
+    for (const [a, b] of hangSegs(f, n)) for (let r = Math.floor(a / bpr); r <= Math.floor((b - 1) / bpr); r++) rowFeat[r].push({ f, lane: k, x: Math.max(a, r * bpr), y: Math.min(b, (r + 1) * bpr), hang: true });
   }
   // enzymes per row
   const enz = enzymeView(doc), rowEnz = Array.from({ length: rows }, () => []), rowSite = Array.from({ length: rows }, () => []), rowBot = Array.from({ length: rows }, () => []);
@@ -96,6 +97,12 @@ function renderSeq(doc, force) {
     b.push(`<div class="selLayer" style="top:${eH}px;height:${2 * SV.lineH}px"></div>`);
     const fy0 = eH + 2 * SV.lineH + 6;
     for (const o of rowFeat[r]) {
+      if (o.hang) {   // non-matching 5' overhang of a primer: zigzag line beside the matching bar
+        const w = (o.y - o.x) * cw, top = fy0 + laneTop[o.lane], cnt = Math.max(2, Math.round(w / (cw * 1.2))), pts = [];
+        for (let i = 0; i <= cnt; i++) pts.push(`${f2(w * i / cnt)},${i % 2 ? 16 : 3}`);
+        b.push(`<svg class="fhang" data-fid="${o.f.id}" style="left:${f2((o.x - rs) * cw)}px;top:${top}px" width="${f2(w)}" height="19"><polyline points="${pts.join(' ')}" stroke="${o.f.color}"/><rect width="${f2(w)}" height="19" fill="transparent" stroke="none"/></svg>`);
+        continue;
+      }
       const f = o.f, left = (o.x - rs) * cw, w = (o.y - o.x) * cw, top = fy0 + laneTop[o.lane], tr = isTrans(f);
       const cls = 'fbar' + (o.arrR && !f.ext ? ' arR' : '') + (o.arrL && !f.ext ? ' arL' : '') + (f.orf ? ' orf' : '') + (f.ext ? ' ext' : '') + (doc.selFid === (f.ext ? f.parent.id : f.id) ? ' on' : '');
       const fid = f.ext ? f.parent.id : f.id;

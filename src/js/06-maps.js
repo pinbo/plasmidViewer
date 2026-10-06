@@ -36,7 +36,7 @@ function spreadLabels(items, gap, minY, maxY) {
 function renderCircular(doc, host) {
   const n = doc.seq.length, feats = visibleFeatures(doc);
   const R = 215, BH = 22, LH = 25;
-  const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs })), n * 0.002);
+  const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), n * 0.002);
   const lanes = Math.max(1, count), rTop = R + (lanes - 1) * LH + BH / 2 + 4;
   const ang = p => 2 * Math.PI * p / n;
   const sel = selRange(doc);
@@ -66,15 +66,20 @@ function renderCircular(doc, host) {
       const a1 = ang(a), a2 = Math.min(ang(b), 2 * Math.PI - 0.002);
       out.push(`<path class="mp-feat${doc.selFid === f.id ? ' on' : ''}${f.orf ? ' orf' : ''}" data-fid="${f.id}" d="${arcSeg(r1, r2, a1, a2, head, 14)}" fill="${f.color}"></path>`);
     });
+    for (const [a, b] of hangSegs(f, n)) {
+      const a1 = ang(a), a2 = ang(b), cnt = Math.max(2, Math.round((a2 - a1) * rc / 7)), pts = [];
+      for (let i = 0; i <= cnt; i++) pts.push(polar(i % 2 ? r1 + 2 : r2 - 2, a1 + (a2 - a1) * i / cnt).map(f2).join(','));
+      out.push(`<polyline class="mp-hang${doc.selFid === f.id ? ' on' : ''}" data-fid="${f.id}" points="${pts.join(' ')}" stroke="${f.color}"/>`);
+    }
     // label anchor: middle of the longest segment
     const seg = f.locs.reduce((m, l) => (l[1] - l[0] > m[1] - m[0] ? l : m));
     labels.push({ kind: 'f', f, theta: ang((seg[0] + seg[1]) / 2), rr: r2 + 2, text: f.name, color: f.color });
   }
   // enzymes
-  const enz = enzymeView(doc);
+  const enz = enzymeView(doc), isSel = e => !!sel && sel[0] === e.s && sel[1] === e.e;
   for (const e of enz) {
     const a = ang(e.top), [x1, y1] = polar(R - 13, a), [x2, y2] = polar(rTop + 2, a);
-    out.push(`<line class="mp-cut" x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}"/>`);
+    out.push(`<line class="mp-cut${isSel(e) ? ' on' : ''}" data-enz="${esc(e.name)}" x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}"/>`);
     labels.push({ kind: 'e', e, theta: a, rr: rTop + 2, text: `${e.name} (${e.top})` });
   }
   // label layout
@@ -88,7 +93,7 @@ function renderCircular(doc, host) {
       const [ax, ay] = polar(l.rr, l.theta);
       const cls = l.kind === 'e' ? 'mp-lbl enz' : 'mp-lbl';
       const attr = l.kind === 'e' ? `data-enz="${esc(l.e.name)}" data-s="${l.e.s}" data-e="${l.e.e}"` : `data-fid="${l.f.id}"`;
-      out.push(`<polyline class="mp-lead" points="${f2(ax)},${f2(ay)} ${f2(x - s * 6)},${f2(l.y)} ${f2(x - s * 3)},${f2(l.y)}"/>`);
+      out.push(`<polyline class="mp-lead${(l.kind === 'f' && doc.selFid === l.f.id) || (l.kind === 'e' && isSel(l.e)) ? ' on' : ''}" ${attr} points="${f2(ax)},${f2(ay)} ${f2(x - s * 6)},${f2(l.y)} ${f2(x - s * 3)},${f2(l.y)}"/>`);
       out.push(`<text class="${cls}" ${attr} x="${f2(x)}" y="${f2(l.y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central">${esc(l.text)}</text>`);
     }
   }
@@ -142,7 +147,7 @@ function renderLinear(doc, host) {
     const nameW = textWidth(f.name, font) + 8;
     const [a, b] = featBounds(f); const bw = (X(b) - X(a));
     const inside = nameW <= bw - 14;
-    const ivs = f.locs.map(([s, e]) => [X(s), X(e)]);
+    const ivs = f.locs.concat(hangSegs(f, n)).map(([s, e]) => [X(s), X(e)]);
     if (!inside) { const last = f.strand === -1 ? ivs[0] : ivs[ivs.length - 1]; ivs.push(f.strand === -1 ? [last[0] - nameW, last[0]] : [last[1], last[1] + nameW]); }
     return { id: f.id, ivs, inside, nameW };
   });
@@ -162,7 +167,7 @@ function renderLinear(doc, host) {
   // enzymes
   for (const e of enz) {
     const y = 24 + e.row * EH + 6;
-    out.push(`<line class="mp-cut" x1="${f2(e.x)}" y1="${y + 4}" x2="${f2(e.x)}" y2="${baseY}"/>`);
+    out.push(`<line class="mp-cut${sel && sel[0] === e.s && sel[1] === e.e ? ' on' : ''}" data-enz="${esc(e.name)}" x1="${f2(e.x)}" y1="${y + 4}" x2="${f2(e.x)}" y2="${baseY}"/>`);
     out.push(`<text class="mp-lbl enz" data-enz="${esc(e.name)}" data-s="${e.s}" data-e="${e.e}" x="${f2(e.x + 3)}" y="${y}" dominant-baseline="central">${esc(e.text)}</text>`);
   }
   // features
@@ -178,6 +183,11 @@ function renderLinear(doc, host) {
       else d = `M${f2(x1)} ${y} H${f2(x2)} V${y + h} H${f2(x1)}Z`;
       out.push(`<path class="mp-feat${doc.selFid === f.id ? ' on' : ''}${f.orf ? ' orf' : ''}" data-fid="${f.id}" d="${d}" fill="${f.color}"></path>`);
     });
+    for (const [a, b] of hangSegs(f, n)) {
+      const x1 = X(a), x2 = X(b), cnt = Math.max(2, Math.round((x2 - x1) / 6)), pts = [];
+      for (let i = 0; i <= cnt; i++) pts.push(`${f2(x1 + (x2 - x1) * i / cnt)},${f2(y + (i % 2 ? FH - 3 : 3))}`);
+      out.push(`<polyline class="mp-hang${doc.selFid === f.id ? ' on' : ''}" data-fid="${f.id}" points="${pts.join(' ')}" stroke="${f.color}"/>`);
+    }
     const [a, b] = featBounds(f);
     if (it.inside) out.push(`<text class="mp-flbl" data-fid="${f.id}" x="${f2((X(a) + X(b)) / 2)}" y="${y + FH / 2}" text-anchor="middle" dominant-baseline="central" fill="${textOn(f.color)}">${esc(f.name)}</text>`);
     else if (f.strand === -1) out.push(`<text class="mp-lbl" data-fid="${f.id}" x="${f2(X(a) - 4)}" y="${y + FH / 2}" text-anchor="end" dominant-baseline="central">${esc(f.name)}</text>`);
@@ -209,8 +219,12 @@ svg { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
 .mp-lbl { fill: #1d2530; font-size: 12.5px; font-weight: 700; }
 .mp-lbl.enz { fill: #1c55c7; font-weight: 600; font-size: 12px; }
 .mp-flbl { font-size: 12px; font-weight: 600; }
-.mp-lead { fill: none; stroke: #6a7686; stroke-width: .8; opacity: .55; }
-.mp-cut { stroke: #1c55c7; stroke-width: 1; opacity: .45; }
+.mp-hang { fill: none; stroke-width: 2; stroke-linejoin: round; cursor: pointer; }
+.mp-hang.hov, .mp-hang.on { stroke: #e5322d; }
+.mp-lead { fill: none; stroke: #6a7686; stroke-width: .8; opacity: .55; pointer-events: none; }
+.mp-lead.on, .mp-lead.hov { stroke: #e5322d; stroke-width: 1.4; opacity: 1; }
+.mp-cut { stroke: #1c55c7; stroke-width: 1; opacity: .45; pointer-events: none; }
+.mp-cut.hov, .mp-cut.on { stroke: #e5322d; stroke-width: 1.8; opacity: 1; }
 .mp-title { fill: #1d2530; font-size: 24px; font-weight: 700; }
 .mp-title.lin { font-size: 14px; }
 .mp-sub { fill: #6a7686; font-size: 17px; }

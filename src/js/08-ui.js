@@ -224,6 +224,7 @@ function contextMenu(e) {
     { label: 'Paste reverse complement', disabled: ro, action: () => doPaste(doc, true) },
     { label: 'Delete', hint: '⌫', disabled: !sel || ro, action: () => deleteSelection(doc) }, '-',
     { label: 'Add feature from selection…', disabled: !sel, action: () => openFeatureDialog(doc) },
+    { label: 'Add primer by sequence…', action: () => openPrimerDialog(doc) },
   ];
   if (f) items.push({ label: `Edit “${f.name}”…`, action: () => openFeatureDialog(doc, f) }, { label: `Delete feature “${f.name}”`, action: () => removeFeature(doc, f.id) });
   items.push('-', { label: 'To uppercase', disabled: !sel || ro, action: () => changeCase(doc, 'upper') },
@@ -285,6 +286,36 @@ function openFeatureDialog(doc, f) {
     },
   });
   openModal(isNew ? 'Add feature' : 'Edit feature', body, buttons);
+}
+
+/* ----- add a primer by sequence: the 3' part must match, a non-matching 5' tail is kept and drawn as a zigzag ----- */
+function findPrimerSite(doc, primer, minLen) {
+  const U = seqU(doc), n = U.length, P = primer.toUpperCase(), ext = doc.circular ? U + U.slice(0, Math.max(0, P.length - 1)) : U;
+  for (let L = Math.min(P.length, n); L >= minLen; L--) {
+    const suf = P.slice(P.length - L), rc = revcomp(suf);
+    const all = (s) => { const out = []; for (let i = ext.indexOf(s); i !== -1 && i < n; i = ext.indexOf(s, i + 1)) out.push(i); return out; };
+    const fw = all(suf), rv = all(rc);
+    if (fw.length + rv.length) return { L, strand: fw.length ? 1 : -1, pos: fw.length ? fw[0] : rv[0], count: fw.length + rv.length };
+  }
+  return null;
+}
+function openPrimerDialog(doc) {
+  const name = el('input', { placeholder: 'e.g. Fwd_primer' }), ta = el('textarea', { rows: 3, class: 'mono', placeholder: "Primer sequence 5′→3′ (the 5′ end may be a non-matching tail)" }), min = el('input', { type: 'number', min: 8, max: 60, value: 15, style: 'width:70px' });
+  const info = el('div', { class: 'small-note' }); let hit = null;
+  const upd = () => {
+    const s = cleanSeq(ta.value).toUpperCase(); hit = null;
+    if (!s) { info.textContent = ''; return; }
+    if (/[^ACGT]/.test(s)) { info.textContent = 'Only A, C, G, T are supported.'; return; }
+    hit = findPrimerSite(doc, s, Math.max(8, +min.value || 15));
+    info.textContent = hit ? `Binds the ${hit.strand === 1 ? 'top' : 'bottom'} strand at ${hit.pos + 1}..${hit.pos + hit.L} with its 3′ ${hit.L} nt${hit.L < s.length ? `; the 5′ ${s.length - hit.L} nt do not match and are drawn as a zigzag` : ' (full match)'}${hit.count > 1 ? `. ${hit.count} binding sites found – the first is used` : ''}. Tm of binding part: ${fmtTm(tmPrimer3(s.slice(s.length - hit.L)))}.` : `No match of at least ${min.value} nt at the 3′ end was found.`;
+  };
+  ta.addEventListener('input', upd); min.addEventListener('input', upd);
+  const body = el('div', { class: 'form' }, field('Name', name), field("Primer sequence (5′→3′)", ta), field('Minimum 3′ match (nt)', min), info);
+  openModal('Add primer', body, [{ label: 'Cancel' }, { label: 'Add primer', primary: true, action: () => {
+    upd(); if (!hit) { toast('No binding site found'); return false; }
+    const s = cleanSeq(ta.value).toUpperCase(), nm = name.value.trim() || 'primer';
+    addFeature(doc, primerFeature(nm, s, hit.strand, segsFor(hit.pos, hit.L, doc.seq.length), null, s.length - hit.L));
+  } }]);
 }
 
 /* ----- feature detection dialog ----- */
@@ -573,7 +604,7 @@ const actions = {
   save: () => App.cur && saveDoc(App.cur), saveas: () => App.cur && saveDoc(App.cur, true),
   undo: () => App.cur && undo(App.cur), redo: () => App.cur && redo(App.cur),
   'view-map': () => setView('map'), 'view-seq': () => setView('seq'), 'view-split': () => setView('split'),
-  detect: () => App.cur && openDetectDialog(App.cur), addfeature: () => App.cur && openFeatureDialog(App.cur), library: openLibraryDialog, help: openHelp,
+  detect: () => App.cur && openDetectDialog(App.cur), addfeature: () => App.cur && openFeatureDialog(App.cur), addprimer: () => App.cur && openPrimerDialog(App.cur), library: openLibraryDialog, help: openHelp,
   'find-next': () => runFind(1), 'find-prev': () => runFind(-1),
   toggleedit: () => { App.editing = !App.editing; toast(App.editing ? 'Sequence editing enabled' : 'Sequence editing disabled (features can still be edited)'); requestUpdate(true); },
   toggleside: () => { App.settings.sideOpen = !App.settings.sideOpen; saveSettings(); applyLayout(); requestUpdate(false); },

@@ -46,8 +46,10 @@ function backboneAssembly(vec, keepFrom, keepTo, mid) {
   for (const f of mid.features) { const c = cloneFeat(f); c.locs = c.locs.map(([a, b]) => [a + midStart, b + midStart]); feats.push(c); }
   return { seq, features: feats, midStart, dropped };
 }
-function primerFeature(name, seq, strand, locs, note) {
-  return { name, type: 'primer_bind', strand, locs, color: '#6b7ae0', quals: { note: [`${note || name}: 5'-${seq}-3'`] } };
+function primerFeature(name, seq, strand, locs, note, unmatched5) {
+  const quals = { note: [`${note || name}: 5'-${seq}-3'`] };
+  if (unmatched5) { quals.unmatched5 = [String(unmatched5)]; quals.note.push(`the first ${unmatched5} nt at the 5' end do not match this plasmid (drawn as a zigzag)`); }
+  return { name, type: 'primer_bind', strand, locs, color: '#6b7ae0', quals };
 }
 function joinParts(parts) {
   let text = '', features = []; const offs = [];
@@ -162,7 +164,7 @@ function designGoldenGate(o) {
   primers.forEach(pr => {
     const s = asm.midStart + partOff[pr.part], e2 = s + parts[pr.part].text.length;
     const locs = pr.strand === 1 ? circLocs(s - pr.tail, s + pr.gs.length, N) : circLocs(e2 - pr.gs.length, e2 + pr.tail, N);
-    feats.push(primerFeature(pr.name, pr.seq, pr.strand, locs));
+    feats.push(primerFeature(pr.name, pr.seq, pr.strand, locs, null, head.length));   // pad + site + spacer are cut off, only overhang + binding part remain
   });
   if (asm.dropped) warnings.push(`${asm.dropped} vector feature(s) lie in the dropout region or span a cut and were not carried over.`);
   notes.push(`${e.name} (${core}, ${a} nt spacer, ${ovLen}-nt 5′ overhang). Vector overhangs: ${ovL} → insert → ${ovR}. Primers = ${pad ? pad + ' + ' : ''}${core} + ${spacer} + overhang + gene-specific sequence; the pad, site and spacer are removed by the digestion and are not in the final plasmid. Junction overhangs: ${junc.join(' | ')}.`);
@@ -217,7 +219,9 @@ function designGateway(o) {
     if (o.extraF.length % 3 !== 0 || o.extraR.length % 3 !== 0) notes.push('Check the reading frame: the attB1 primer’s extra bases should keep the insert in frame for downstream LR reactions.');
     name = `${D.name.replace(/_rc$/, '')}_${part.name}_entry`;
     const N = asm.seq.length, s = asm.midStart + (tailF.length - (c1 + 15)), e = s + part.text.length;
-    asm.features.push(primerFeature(primers[0].name, primers[0].seq, 1, circLocs(s, s + gsF.length, N)), primerFeature(primers[1].name, primers[1].seq, -1, circLocs(e - gsR.length, e, N)));
+    // the attB primers only match the final plasmid from the crossover core inwards; the rest of each tail is drawn as an unmatched zigzag
+    const hangF = c1, hangR = P.length - (c2 + 15), mR = tailR.length - hangR;
+    asm.features.push(primerFeature(primers[0].name, primers[0].seq, 1, circLocs(s - (tailF.length - hangF), s + gsF.length, N), null, hangF), primerFeature(primers[1].name, primers[1].seq, -1, circLocs(e - gsR.length, e + mR, N), null, hangR));
   } else {
     const entry = findAtt(o.entry), dest = findAtt(o.dest);
     const E = entry.doc, D = dest.doc;
@@ -274,11 +278,21 @@ function openCloningDialog() {
   /* ----- method panels ----- */
   const panel = el('div', { class: 'cpanel' });
   const ctl = {};
-  const uniqueCutters = d => [...analyzeEnzymes(d)].filter(([, r]) => r.cuts.length === 1).map(([n]) => n);
+  /* choices = unique cutters + the user's selected enzymes; an enzyme with several sites gets one choice per site (value "name|index") */
+  const enzChoices = d => {
+    const res = analyzeEnzymes(d), mine = new Set(App.settings.enzShow), out = [];
+    for (const [name, r] of res) {
+      const k = r.cuts.length; if (!k || (k > 1 && !mine.has(name))) continue;
+      const cuts = r.cuts.map((c, i) => ({ c, i })).sort((x, y) => x.c.top - y.c.top);
+      for (const { c, i } of cuts) out.push({ value: `${name}|${i}`, text: k === 1 ? name : `${name} – site at ${c.top} (${k} sites)`, name, k, sort: name + '\0' + String(c.top).padStart(9, '0') });
+    }
+    return out.sort((x, y) => x.sort.localeCompare(y.sort));
+  };
   const fillEnz = () => {
-    const d = getDoc(ctl.vec), names = uniqueCutters(d);
-    for (const s of [ctl.enz1, ctl.enz2]) { const v = s.value; s.innerHTML = ''; s.append(el('option', { value: '' }, s === ctl.enz2 ? '— none (single cut) —' : '— choose —')); for (const n of names) s.append(el('option', { value: n }, n)); if (names.includes(v)) s.value = v; }
-    ctl.enzInfo.textContent = `${names.length} unique cutters in ${d.name}`;
+    const d = getDoc(ctl.vec), list = enzChoices(d);
+    for (const s of [ctl.enz1, ctl.enz2]) { const v = s.value; s.innerHTML = ''; s.append(el('option', { value: '' }, s === ctl.enz2 ? '— none (single cut) —' : '— choose —')); for (const o of list) s.append(el('option', { value: o.value }, o.text)); if (list.some(o => o.value === v)) s.value = v; }
+    const uq = list.filter(o => o.k === 1).length;
+    ctl.enzInfo.textContent = `${uq} unique cutter${uq === 1 ? '' : 's'}${list.length > uq ? ` + ${list.length - uq} site(s) of your selected enzymes` : ''} in ${d.name}`;
   };
   const fillGG = () => {
     const d = getDoc(ctl.vec), res = analyzeEnzymes(d), v = ctl.ggEnz.value; ctl.ggEnz.innerHTML = '';
@@ -342,7 +356,7 @@ function openCloningDialog() {
           if (ctl.mode.value === 'sel') { const r = selRange(vec); [leftEnd, rightStart] = r || [vec.caret, vec.caret]; }
           else {
             if (!ctl.enz1.value) throw new Error('Choose at least one restriction enzyme for the vector (or use the selection mode).');
-            const cutObj = n => ({ name: n, ...analyzeEnzymes(vec).get(n).cuts[0] });
+            const cutObj = v => { const [n, i] = v.split('|'); return { name: n, ...analyzeEnzymes(vec).get(n).cuts[+i] }; };
             const ca = cutObj(ctl.enz1.value), cb = ctl.enz2.value ? cutObj(ctl.enz2.value) : ca;
             if (ctl.enz2.value && ca.top === cb.top) throw new Error('The two enzymes cut at the same position.');
             const [cx, cy] = ca.top <= cb.top ? [ca, cb] : [cb, ca];

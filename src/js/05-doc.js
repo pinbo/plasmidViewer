@@ -241,6 +241,15 @@ function addFeatures(doc, feats) {
   mutate(doc, () => { for (const f of feats) doc.features.push(normFeature(f)); });
 }
 
+/* primers whose 5' end does not match the sequence (e.g. attB tails): quals.unmatched5 = number of non-matching 5' nt; returns the
+   stretch(es) next to the matching part where that overhang is drawn (as a zigzag) */
+function hangSegs(f, n) {
+  const k = +((f.quals || {}).unmatched5 || [])[0] || 0; if (!k || !f.strand || !f.locs.length || k >= n) return [];
+  const x = f.strand === 1 ? f.locs[0][0] - k : f.locs[f.locs.length - 1][1], y = x + k;
+  if (x < 0) return [[x + n, n], [0, y]].filter(s => s[1] > s[0]);
+  if (y > n) return [[x, n], [0, y - n]].filter(s => s[1] > s[0]);
+  return [[x, y]];
+}
 function visibleFeatures(doc) {
   const list = App.settings.showFeatures ? doc.features.slice() : [];
   if (App.settings.showOrfs) list.push(...findORFs(doc, App.settings.orfMin));
