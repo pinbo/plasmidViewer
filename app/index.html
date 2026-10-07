@@ -2144,28 +2144,49 @@ function renderCircular(doc, host) {
   const Rl = rTop + 22, Re = rTop + 8, minY = 22, maxY = CH - 22, under = [], text = [];
   let bx0 = CCX - rTop - 12, bx1 = CCX + rTop + 12, by0 = CCY - rTop - 12, by1 = CCY + rTop + 12;   // bounds of everything drawn, so the view can be fitted tightly
   labels.sort((p, q) => p.theta - q.theta);
-  const cols = splitRingLabels(labels);
   const segMin = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, -((ax - CCX) * dx + (ay - CCY) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(ax + t * dx - CCX, ay + t * dy - CCY); };
+  const labText = l => l.kind === 'e' ? `${l.g.names.join(', ')} (${l.g.top})` : l.text;
+  const labFont = l => l.kind === 'e' ? `600 ${F.enz}px system-ui, sans-serif` : `700 ${F.feat}px system-ui, sans-serif`;
+  const labH = l => l.kind === 'e' ? 1.17 * F.enz : 1.125 * F.feat;
+  // draws one name (right of the vertical axis: starts at x, left: ends at x) with its leader, which meets the near end of the name
+  const emit = (l, s, x, y) => {
+    const [ax, ay] = polar(l.rr, l.theta), lx = x - s * 3;
+    // straight from the start of the leader to the name; if that would dip back towards the ring, leave the shape radially first
+    let pts = `${f2(ax)},${f2(ay)} ${f2(lx)},${f2(y)}`;
+    if (segMin(ax, ay, lx, y) < l.rr - 0.5) { const [ex, ey] = polar(Math.max(Re, l.rr), l.theta); pts = `${f2(ax)},${f2(ay)} ${f2(ex)},${f2(ey)} ${f2(lx)},${f2(y)}`; }
+    const lw = textWidth(labText(l), labFont(l)) + 6;
+    bx0 = Math.min(bx0, s === 1 ? x : x - lw); bx1 = Math.max(bx1, s === 1 ? x + lw : x); by0 = Math.min(by0, y - 10); by1 = Math.max(by1, y + 10);
+    const tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
+    if (l.kind === 'e') {
+      under.push(`<polyline class="mp-lead${l.g.items.some(isSel) ? ' on' : ''}" data-enz="${esc(l.g.names.join('|'))}" points="${pts}"/>`);
+      text.push(enzGroupSvg(l.g, `class="mp-lbl enz" ${tattr}`));
+    } else {
+      under.push(`<polyline class="mp-lead${doc.selFid === l.f.id ? ' on' : ''}" data-fid="${l.f.id}" points="${pts}"/>`);
+      text.push(`<text class="mp-lbl" data-fid="${l.f.id}" ${tattr}>${esc(l.text)}</text>`);
+    }
+  };
+  // names close to the vertical axis (right above / below the ring) sit in rows above / below the ring, starting at their own position
+  const A = 25 * Math.PI / 180, zTop = [], zBot = [], side = [];
+  for (const l of labels) (l.theta <= A || l.theta >= 2 * Math.PI - A ? zTop : Math.abs(l.theta - Math.PI) <= A ? zBot : side).push(l);
+  const cols = splitRingLabels(side);
+  let sideMin = CCY - Rl, sideMax = CCY + Rl;
   for (const [s, list] of [[1, cols.right], [-1, cols.left]]) {
-    const ys = placeStack(list.map(l => CCY - Rl * Math.cos(l.theta)), list.map(l => (l.kind === 'e' ? 1.17 * F.enz : 1.125 * F.feat)), minY, maxY);
+    const ys = placeStack(list.map(l => CCY - Rl * Math.cos(l.theta)), list.map(labH), minY, maxY);
     list.forEach((l, i) => {
-      const y = ys[i], dy = y - CCY, x = CCX + s * (Math.sqrt(Math.max(Rl * Rl - dy * dy, (0.35 * Rl) ** 2)) + 10);
-      const [ax, ay] = polar(l.rr, l.theta), lx = x - s * 3;
-      // straight from the start of the leader to the near end of the name (its start on the right, its end on the left); if that would dip back
-      // towards the ring, leave the shape radially first
-      let pts = `${f2(ax)},${f2(ay)} ${f2(lx)},${f2(y)}`;
-      if (segMin(ax, ay, lx, y) < l.rr - 0.5) { const [ex, ey] = polar(Math.max(Re, l.rr), l.theta); pts = `${f2(ax)},${f2(ay)} ${f2(ex)},${f2(ey)} ${f2(lx)},${f2(y)}`; }
-      const lw = textWidth(l.kind === 'e' ? `${l.g.names.join(', ')} (${l.g.top})` : l.text, l.kind === 'e' ? `600 ${F.enz}px system-ui, sans-serif` : `700 ${F.feat}px system-ui, sans-serif`) + 6;
-      bx0 = Math.min(bx0, s === 1 ? x : x - lw); bx1 = Math.max(bx1, s === 1 ? x + lw : x); by0 = Math.min(by0, y - 10); by1 = Math.max(by1, y + 10);
-      const tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
-      if (l.kind === 'e') {
-        under.push(`<polyline class="mp-lead${l.g.items.some(isSel) ? ' on' : ''}" data-enz="${esc(l.g.names.join('|'))}" points="${pts}"/>`);
-        text.push(enzGroupSvg(l.g, `class="mp-lbl enz" ${tattr}`));
-      } else {
-        under.push(`<polyline class="mp-lead${doc.selFid === l.f.id ? ' on' : ''}" data-fid="${l.f.id}" points="${pts}"/>`);
-        text.push(`<text class="mp-lbl" data-fid="${l.f.id}" ${tattr}>${esc(l.text)}</text>`);
-      }
+      const y = ys[i], dy = y - CCY; sideMin = Math.min(sideMin, y); sideMax = Math.max(sideMax, y);
+      emit(l, s, CCX + s * (Math.sqrt(Math.max(Rl * Rl - dy * dy, (0.35 * Rl) ** 2)) + 10), y);
     });
+  }
+  const rowH = Math.max(1.17 * F.enz, 1.125 * F.feat);
+  for (const [list, dir] of [[zTop, -1], [zBot, 1]]) {
+    const rows = [], base = dir < 0 ? Math.min(CCY - Rl - 6, sideMin - rowH) : Math.max(CCY + Rl + 6, sideMax + rowH);
+    for (const l of list) {
+      const s = Math.sin(l.theta) >= 0 ? 1 : -1, x0 = CCX + Re * Math.sin(l.theta) + s * 5, w = textWidth(labText(l), labFont(l)) + 10;
+      const lo = s === 1 ? x0 : x0 - w, hi = s === 1 ? x0 + w : x0;
+      let k = 0; while ((rows[k] || []).some(([a, b]) => lo < b && hi > a)) k++;
+      (rows[k] = rows[k] || []).push([lo, hi]);
+      emit(l, s, x0, base + dir * k * rowH);
+    }
   }
   out.splice(underAt, 0, ...under); out.push(...text);
   // caret
