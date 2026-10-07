@@ -766,7 +766,7 @@ function wireHover() {
     else {
       const nm = ee.dataset.enz;
       $$('#viewport [data-ek]').forEach(n => { if (ee.dataset.ek ? n.dataset.ek === ee.dataset.ek : n.dataset.ek.startsWith(nm + ':')) n.classList.add('hov'); });
-      $$('#viewport [data-enz]').forEach(n => { if (n.dataset.enz === nm) n.classList.add('hov'); });
+      $$('#viewport [data-enz]').forEach(n => { if (n.dataset.enz.split('|').includes(nm)) n.classList.add('hov'); });
       html = enzymeTipHTML(doc, nm);
     }
     if (!html) return;

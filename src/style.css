@@ -186,6 +186,7 @@ svg.map.lin { width: auto; height: auto; }
 
 /* hover highlight + info pop-up */
 .mp-feat.hov { stroke: #e5322d; stroke-width: 2.6; }
+.mp-lbl tspan.hov { fill: #e5322d; }
 .mp-lbl.hov, .mp-flbl.hov { fill: #e5322d; stroke: #e5322d; stroke-width: .6px; paint-order: stroke; }
 .mp-flbl.hov { fill: #fff; stroke: #e5322d; stroke-width: 3px; paint-order: stroke; }
 .fhang.hov polyline { stroke: #e5322d !important; }
