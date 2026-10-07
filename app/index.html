@@ -2079,9 +2079,16 @@ function splitRingLabels(L) {
 
 function renderCircular(doc, host) {
   const n = doc.seq.length, feats = visibleFeatures(doc);
-  const R = 160, BH = 16.5, LH = 19.5;
+  const BH = 16.5, LH = 19.5;
   const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), n * 0.002);
-  const lanes = Math.max(1, count), rTop = R + (lanes - 1) * LH + BH / 2 + 4;
+  const lanes = Math.max(1, count), laneSpan = (lanes - 1) * LH + BH / 2 + 4;
+  // ring size follows the number of names: few features / enzymes → a large ring that uses the room, many → a smaller ring (and the widest name decides how much width the ring may take)
+  const egroups = groupEnzymes(enzymeView(doc)), nLabels = feats.length + egroups.length;
+  let maxW = 60;
+  for (const f of feats) maxW = Math.max(maxW, textWidth(f.name, '700 16px system-ui, sans-serif'));
+  for (const g of egroups) maxW = Math.max(maxW, textWidth(`${g.names.join(', ')} (${g.top})`, '600 12px system-ui, sans-serif'));
+  const RMax = Math.min(250, 480 - maxW - 36 - laneSpan), RMin = Math.min(125, RMax);
+  const R = Math.max(100, RMin + (RMax - RMin) * (1 - clamp((nLabels - 8) / 52, 0, 1))), rTop = R + laneSpan;
   const ang = p => 2 * Math.PI * p / n;
   const sel = selRange(doc), segs = selSegs(doc);
   const out = [];
@@ -2118,7 +2125,7 @@ function renderCircular(doc, host) {
   }
   // enzymes (sites cutting at the same position share a label and a line; the location tick is short, the leader continues from its end)
   const isSel = e => !!sel && sel[0] === e.s && sel[1] === e.e, cutR0 = R - BH * 0.55, cutR1 = R + BH * 0.55;   // tick = 10% longer than the feature shapes are wide
-  for (const g of groupEnzymes(enzymeView(doc))) {
+  for (const g of egroups) {
     const a = ang(g.top), [x1, y1] = polar(cutR0, a), [x2, y2] = polar(cutR1, a);
     out.push(`<line class="mp-cut${g.items.some(isSel) ? ' on' : ''}" data-enz="${esc(g.names.join('|'))}" x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}"/>`);
     labels.push({ kind: 'e', g, theta: a, rr: cutR1 });
@@ -2126,6 +2133,7 @@ function renderCircular(doc, host) {
   // label layout: names stay around the ring in two columns that follow the circle (right / left of the vertical axis); each column is filled
   // evenly, every name as near to its position as the stacking allows, and the order matches the order around the ring so leaders do not cross
   const Rl = rTop + 22, Re = rTop + 8, minY = 22, maxY = CH - 22, under = [], text = [];
+  let bx0 = CCX - rTop - 12, bx1 = CCX + rTop + 12, by0 = CCY - rTop - 12, by1 = CCY + rTop + 12;   // bounds of everything drawn, so the view can be fitted tightly
   labels.sort((p, q) => p.theta - q.theta);
   const cols = splitRingLabels(labels);
   const segMin = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, -((ax - CCX) * dx + (ay - CCY) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(ax + t * dx - CCX, ay + t * dy - CCY); };
@@ -2138,6 +2146,8 @@ function renderCircular(doc, host) {
       // towards the ring, leave the shape radially first
       let pts = `${f2(ax)},${f2(ay)} ${f2(lx)},${f2(y)}`;
       if (segMin(ax, ay, lx, y) < l.rr - 0.5) { const [ex, ey] = polar(Math.max(Re, l.rr), l.theta); pts = `${f2(ax)},${f2(ay)} ${f2(ex)},${f2(ey)} ${f2(lx)},${f2(y)}`; }
+      const lw = textWidth(l.kind === 'e' ? `${l.g.names.join(', ')} (${l.g.top})` : l.text, l.kind === 'e' ? '600 12px system-ui, sans-serif' : '700 16px system-ui, sans-serif') + 6;
+      bx0 = Math.min(bx0, s === 1 ? x : x - lw); bx1 = Math.max(bx1, s === 1 ? x + lw : x); by0 = Math.min(by0, y - 10); by1 = Math.max(by1, y + 10);
       const tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
       if (l.kind === 'e') {
         under.push(`<polyline class="mp-lead${l.g.items.some(isSel) ? ' on' : ''}" data-enz="${esc(l.g.names.join('|'))}" points="${pts}"/>`);
@@ -2159,7 +2169,8 @@ function renderCircular(doc, host) {
   out.push(`<text class="mp-title" x="${CCX}" y="${CCY - 16}" text-anchor="middle">${esc(nm)}</text>`);
   out.push(`<text class="mp-sub" x="${CCX}" y="${CCY + 12}" text-anchor="middle">${n.toLocaleString('en-US')} bp</text>`);
   if (segs.length) out.push(`<text class="mp-sub small" x="${CCX}" y="${CCY + 36}" text-anchor="middle">${segLabel(segs)} · ${segs.reduce((t, s) => t + s[1] - s[0], 0).toLocaleString('en-US')} bp selected</text>`);
-  host.innerHTML = `<svg class="map circ" viewBox="0 0 ${CW} ${CH}" data-n="${n}" preserveAspectRatio="xMidYMid meet">${out.join('')}</svg>`;
+  const pad = 14;
+  host.innerHTML = `<svg class="map circ" viewBox="${f2(bx0 - pad)} ${f2(by0 - pad)} ${f2(bx1 - bx0 + 2 * pad)} ${f2(by1 - by0 + 2 * pad)}" data-n="${n}" data-r="${f2(R)}" preserveAspectRatio="xMidYMid meet">${out.join('')}</svg>`;
 }
 
 /* converts a mouse event on the circular map to a sequence position + whether it is on the ring area */
@@ -2295,7 +2306,7 @@ function buildMapSVG(doc) {
     svg.querySelectorAll('.on').forEach(n => n.classList.remove('on'));
     [svg, ...svg.querySelectorAll('*')].forEach(n => { for (const a of Array.from(n.attributes)) if (a.name.startsWith('data-')) n.removeAttribute(a.name); });
     let w, h;
-    if (doc.circular) { w = CW; h = CH; svg.setAttribute('width', w); svg.setAttribute('height', h); }
+    if (doc.circular) { const vb = svg.getAttribute('viewBox').split(' ').map(Number); w = Math.round(vb[2]); h = Math.round(vb[3]); svg.setAttribute('width', w); svg.setAttribute('height', h); }
     else { w = +svg.getAttribute('width'); h = +svg.getAttribute('height'); svg.setAttribute('viewBox', `0 0 ${w} ${h}`); }
     svg.removeAttribute('class'); svg.removeAttribute('preserveAspectRatio');
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -3211,7 +3222,7 @@ function wireMap() {
     const fe = e.target.closest('[data-fid]');
     if (fe) { const f = doc.features.find(x => x.id === +fe.dataset.fid) || findORFs(doc, App.settings.orfMin).find(x => x.id === fe.dataset.fid); if (f) selectFeature(doc, f); return; }
     let pos;
-    if (circ) { const c = circularPos(svg, e, n); if (c.r < 120 || c.r > 380) { return; } pos = c.pos; } else pos = linearPos(svg, e, n);
+    if (circ) { const c = circularPos(svg, e, n); const rr = +svg.dataset.r || 160; if (c.r < rr * 0.7 || c.r > rr * 2.6) { return; } pos = c.pos; } else pos = linearPos(svg, e, n);
     drag = { start: pos, last: pos, cross: 0 }; setSel(doc, pos, pos, null, false);
     e.preventDefault();
   });

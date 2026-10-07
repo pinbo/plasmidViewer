@@ -638,7 +638,7 @@ function wireMap() {
     const fe = e.target.closest('[data-fid]');
     if (fe) { const f = doc.features.find(x => x.id === +fe.dataset.fid) || findORFs(doc, App.settings.orfMin).find(x => x.id === fe.dataset.fid); if (f) selectFeature(doc, f); return; }
     let pos;
-    if (circ) { const c = circularPos(svg, e, n); if (c.r < 120 || c.r > 380) { return; } pos = c.pos; } else pos = linearPos(svg, e, n);
+    if (circ) { const c = circularPos(svg, e, n); const rr = +svg.dataset.r || 160; if (c.r < rr * 0.7 || c.r > rr * 2.6) { return; } pos = c.pos; } else pos = linearPos(svg, e, n);
     drag = { start: pos, last: pos, cross: 0 }; setSel(doc, pos, pos, null, false);
     e.preventDefault();
   });
