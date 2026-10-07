@@ -150,7 +150,7 @@ function updateSeqSelection(doc) {
   if (!doc || !SV.rows.length) return;
   for (const r of SV.touched) { const l = r.querySelector('.selLayer'); if (l) l.innerHTML = ''; }
   SV.touched = [];
-  const n = doc.seq.length, bpr = SV.bpr, cw = SV.cw, sel = selRange(doc), LH = SV.lineH;
+  const n = doc.seq.length, bpr = SV.bpr, cw = SV.cw, sel = selRange(doc), segs = selSegs(doc), LH = SV.lineH;
   const box = (a0, b0, cls, strand) => {   // paints [a0,b0) over the whole row pair, or only the matched strand's line
     for (let r = Math.floor(a0 / bpr); r <= Math.floor((b0 - 1) / bpr) && r < SV.rows.length; r++) {
       const rs = r * bpr, a = Math.max(a0, rs), b = Math.min(b0, rs + bpr);
@@ -165,8 +165,8 @@ function updateSeqSelection(doc) {
   const curIsSel = !!(curHit && sel && sel[0] === curHit.s && sel[1] === Math.min(curHit.e, n));
   if (F && F.res.length <= 3000) for (const m of F.res) if (!(curIsSel && m === curHit)) hitBox(m, 'fm');
   if (curIsSel) hitBox(curHit, 'fm cur');
-  else if (sel) box(sel[0], sel[1], 'selbox');
-  if (!sel) {
+  else for (const [a, b] of segs) box(a, b, 'selbox');
+  if (!segs.length) {
     const r = seqRowOfPos(doc.caret), col = doc.caret - r * bpr;
     SV.rows[r].querySelector('.selLayer').insertAdjacentHTML('beforeend', `<div class="caret" style="left:${f2(col * cw)}px"></div>`);
     SV.touched.push(SV.rows[r]);
@@ -215,8 +215,8 @@ function renderMini(doc) {
   }
   for (const e of enzymeView(doc)) out.push(`<line class="mp-cut" x1="${f2(X(e.top))}" y1="${baseY - 2}" x2="${f2(X(e.top))}" y2="${baseY + 8}"/>`);
   for (const p of badBases(doc).slice(0, 3000)) out.push(`<line class="mp-bad" x1="${f2(X(p))}" y1="${baseY - 6}" x2="${f2(X(p))}" y2="${baseY + 5}"/>`);
-  const sel = selRange(doc);
-  if (sel) out.push(`<rect class="mp-sel" x="${f2(X(sel[0]))}" y="2" width="${f2(Math.max(2, X(sel[1]) - X(sel[0])))}" height="${H - 4}"/>`);
+  const segs = selSegs(doc);
+  if (segs.length) for (const [a, b] of segs) out.push(`<rect class="mp-sel" x="${f2(X(a))}" y="2" width="${f2(Math.max(2, X(b) - X(a)))}" height="${H - 4}"/>`);
   else out.push(`<line class="mp-caret" x1="${f2(X(doc.caret))}" y1="2" x2="${f2(X(doc.caret))}" y2="${H - 2}"/>`);
   out.push(`<rect id="miniWin" class="mini-win" x="0" y="2" width="0" height="${H - 4}" rx="3"/>`);
   host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" data-n="${n}">${out.join('')}</svg>`;

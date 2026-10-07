@@ -69,9 +69,8 @@ function resolvePart(spec, docs) {
   else {
     const m = spec.src.split(':'), doc = docs.find(d => d.id === +m[1]); if (!doc) throw new Error('Source plasmid is no longer open.');
     let a, b;
-    if (m[0] === 'sel') { const r = selRange(doc); if (!r) throw new Error(`Nothing is selected in “${doc.name}”.`); [a, b] = r; }
-    else { const f = doc.features.find(x => x.id === +m[2]); if (!f) throw new Error('Feature not found.'); [a, b] = featBounds(f); }
-    text = doc.seq.slice(a, b); features = clipFeatures(doc, a, b);
+    if (m[0] === 'sel') { const clip = currentClip(doc); if (!clip) throw new Error(`Nothing is selected in “${doc.name}”.`); text = clip.text; features = clip.features; }
+    else { const f = doc.features.find(x => x.id === +m[2]); if (!f) throw new Error('Feature not found.'); [a, b] = featBounds(f); text = doc.seq.slice(a, b); features = clipFeatures(doc, a, b); }
   }
   if (/[^ACGTacgt]/.test(text)) throw new Error(`Insert “${name}” contains non-ATGC characters – clean it up first.`);
   if (text.length < 30) throw new Error(`Insert “${name}” is too short (${text.length} bp).`);
@@ -326,7 +325,7 @@ function openCloningDialog() {
   /* ----- insert parts ----- */
   const sourceOptions = () => {
     const o = [];
-    for (const d of docs) { const r = selRange(d); if (r) o.push([`sel:${d.id}`, `Selection in “${d.name}” (${r[0] + 1}..${r[1]}, ${(r[1] - r[0]).toLocaleString('en-US')} bp)`]); }
+    for (const d of docs) { const sg = selSegs(d); if (sg.length) o.push([`sel:${d.id}`, `Selection in “${d.name}” (${segLabel(sg)}, ${sg.reduce((t, s) => t + s[1] - s[0], 0).toLocaleString('en-US')} bp)`]); }
     for (const d of docs) for (const f of d.features) o.push([`feat:${d.id}:${f.id}`, `Feature: ${f.name} — ${d.name}`]);
     o.push(['text', 'Pasted sequence…']); return o;
   };
@@ -340,7 +339,7 @@ function openCloningDialog() {
       else if (src.value.startsWith('sel:')) name.value = 'insert' + (rows.indexOf(row) + 1 || 1);
     };
     src.addEventListener('change', sync);
-    const first = !rows.length; if (first) { const d0 = docs.find(d => selRange(d)); if (d0) src.value = `sel:${d0.id}`; else if (src.options.length > 1) src.selectedIndex = 0; }
+    const first = !rows.length; if (first) { const d0 = docs.find(d => selSegs(d).length); if (d0) src.value = `sel:${d0.id}`; else if (src.options.length > 1) src.selectedIndex = 0; }
     row.el = el('div', { class: 'partrow' }, el('div', { class: 'prow' }, el('span', { class: 'pn' }, ''), src, name, el('label', { class: 'chk', title: 'Use the reverse complement of this region' }, rc, 'rev-comp'),
       el('button', { class: 'tx', title: 'Remove this part', onclick: () => { if (rows.length > 1) { rows.splice(rows.indexOf(row), 1); row.el.remove(); renumber(); } } }, '✕')), ta);
     rows.push(row); partsHost.append(row.el); sync(); renumber();
@@ -453,7 +452,7 @@ function openCloningDialog() {
         const parts = specs().map(s => resolvePart(s, docs)), vec = getDoc(ctl.vec);
         if (method === 'homology') {
           const H = clamp(+ctl.H.value || 15, 8, 60); let leftEnd, rightStart, addL = '', addR = '', siteNote = '';
-          if (ctl.mode.value === 'sel') { const r = selRange(vec); [leftEnd, rightStart] = r || [vec.caret, vec.caret]; }
+          if (ctl.mode.value === 'sel') { if (vec.wrap) throw new Error('The selection in the vector runs across the origin – use “Set origin here” to move the origin first.'); const r = selRange(vec); [leftEnd, rightStart] = r || [vec.caret, vec.caret]; }
           else {
             if (!ctl.enz1.value) throw new Error('Choose at least one restriction enzyme for the vector (or use the selection mode).');
             const cutObj = v => { const [n, i] = v.split('|'); return { name: n, ...analyzeEnzymes(vec).get(n).cuts[+i] }; };

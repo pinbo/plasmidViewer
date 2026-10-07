@@ -30,7 +30,7 @@ function normFeature(f) {
   return f;
 }
 function makeDoc(p) {
-  const doc = Object.assign({ name: 'Untitled', seq: '', circular: true, features: [], meta: {}, undo: [], redo: [], dirty: false, rev: 0, anchor: 0, caret: 0, selFid: null, handle: null, _cache: {} }, p);
+  const doc = Object.assign({ name: 'Untitled', seq: '', circular: true, features: [], meta: {}, undo: [], redo: [], dirty: false, rev: 0, anchor: 0, caret: 0, wrap: false, selFid: null, handle: null, _cache: {} }, p);
   doc.id = ++_docUid;
   const n = doc.seq.length;
   doc.features = doc.features.filter(f => f.locs.every(([a, b]) => a >= 0 && b <= n && b > a)).map(normFeature);
@@ -38,11 +38,23 @@ function makeDoc(p) {
 }
 
 const featBounds = f => [Math.min(...f.locs.map(l => l[0])), Math.max(...f.locs.map(l => l[1]))];
-function selRange(doc) { const a = Math.min(doc.anchor, doc.caret), b = Math.max(doc.anchor, doc.caret); return a === b ? null : [a, b]; }
+/* Selection model: anchor/caret are the two ends. Normally the selection is the stretch between them (selRange, null when empty).
+   With doc.wrap (circular plasmids only) it is the other arc – from the larger end through the origin to the smaller one – and selRange is null so that
+   editing code never touches the wrong stretch; use selSegs / selText wherever a read-only view of the selection is enough. */
+function selRange(doc) { if (doc.wrap) return null; const a = Math.min(doc.anchor, doc.caret), b = Math.max(doc.anchor, doc.caret); return a === b ? null : [a, b]; }
+function selSegs(doc) {
+  const lo = Math.min(doc.anchor, doc.caret), hi = Math.max(doc.anchor, doc.caret), n = doc.seq.length;
+  if (lo === hi) return [];
+  return doc.wrap && doc.circular ? [[hi, n], [0, lo]].filter(s => s[1] > s[0]) : [[lo, hi]];
+}
+const selText = doc => selSegs(doc).map(([a, b]) => doc.seq.slice(a, b)).join('');
+const segLabel = segs => segs.map(([a, b]) => `${a + 1}..${b}`).join(' + ');
+const wrapBlocked = doc => { if (!doc.wrap) return false; toast('The selection runs across the origin – editing is not possible there. Copy it, or use “Set origin here” first.', 4500); return true; };
 
-function setSel(doc, anchor, caret, fid = null, reveal = true) {
+function setSel(doc, anchor, caret, fid = null, reveal = true, wrap = false) {
   const n = doc.seq.length;
   doc.anchor = clamp(anchor, 0, n); doc.caret = clamp(caret, 0, n); doc.selFid = fid;
+  doc.wrap = !!wrap && doc.circular && doc.anchor !== doc.caret;
   doc._reveal = reveal;
   requestUpdate(false);
 }
@@ -114,6 +126,7 @@ function editReplace(doc, s, e, text, feats, opts) {
   }, opts);
 }
 function deleteSelection(doc, forward = true) {
+  if (wrapBlocked(doc)) return;
   const r = selRange(doc);
   if (r) return editReplace(doc, r[0], r[1], '');
   const n = doc.seq.length;
@@ -121,6 +134,7 @@ function deleteSelection(doc, forward = true) {
   else if (!forward && doc.caret > 0) editReplace(doc, doc.caret - 1, doc.caret, '', null, { coalesce: true });
 }
 function typeBases(doc, text) {
+  if (wrapBlocked(doc)) return;
   const r = selRange(doc) || [doc.caret, doc.caret];
   editReplace(doc, r[0], r[1], text, null, { coalesce: true });
 }
@@ -145,8 +159,11 @@ function revcompClip(clip) {
 
 /* ----- clipboard (internal clip keeps features; plain text goes to system clipboard) ----- */
 function currentClip(doc) {
-  const r = selRange(doc); if (!r) return null;
-  return { text: doc.seq.slice(r[0], r[1]), features: clipFeatures(doc, r[0], r[1]) };
+  const segs = selSegs(doc); if (!segs.length) return null;
+  if (segs.length === 1) return { text: doc.seq.slice(segs[0][0], segs[0][1]), features: clipFeatures(doc, segs[0][0], segs[0][1]) };
+  // across the origin: the two arcs are joined; features lying in either arc (including ones that themselves cross the origin) come along
+  const n = doc.seq.length, [[hi], [, lo]] = segs;
+  return { text: doc.seq.slice(hi) + doc.seq.slice(0, lo), features: carryFeatures(doc, [{ a: hi, b: n, off: 0 }, { a: 0, b: lo, off: n - hi }]).feats };
 }
 function storeClip(clip) { App.clip = clip; store.set('clip', clip); }
 function lookupClip(text) {
@@ -173,6 +190,7 @@ async function doCopyRC(doc) {
   const rc = revcompClip(clip); storeClip(rc); await copyToSystem(rc.text); toast('Copied reverse complement');
 }
 function pasteClip(doc, clip) {
+  if (wrapBlocked(doc)) return;
   if (!clip || !clip.text) return toast('Nothing to paste');
   const r = selRange(doc) || [doc.caret, doc.caret];
   if (!App.editing) return lockedToast();
@@ -286,6 +304,7 @@ function warnNonATGC(text, where) {
 /* ----- case conversion (length-preserving, so features stay put) ----- */
 function changeCase(doc, mode) {
   if (!App.editing) return lockedToast();
+  if (wrapBlocked(doc)) return;
   const r = selRange(doc); if (!r) return toast('Select some sequence first');
   const t = doc.seq.slice(r[0], r[1]);
   const nt = mode === 'upper' ? t.toUpperCase() : mode === 'lower' ? t.toLowerCase() : t.replace(/[a-z]/gi, c => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()));
@@ -295,8 +314,8 @@ function changeCase(doc, mode) {
 
 /* ----- translations to the clipboard ----- */
 async function copyTranslation(doc, reverse) {
-  const r = selRange(doc); if (!r) return toast('Select some sequence first');
-  let s = seqU(doc).slice(r[0], r[1]); if (reverse) s = revcomp(s);
+  if (!selSegs(doc).length) return toast('Select some sequence first');
+  let s = selText(doc).toUpperCase(); if (reverse) s = revcomp(s);
   const p = translate(s);
   if (!p) return toast('The selection is shorter than one codon');
   await copyToSystem(p);

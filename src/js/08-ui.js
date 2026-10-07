@@ -52,10 +52,10 @@ function renderToolbarState(doc) {
 }
 
 function renderStatus(doc) {
-  const sel = selRange(doc), n = doc.seq.length; let left;
-  if (sel) {
-    const s = doc.seq.slice(sel[0], sel[1]);
-    left = `Selected ${sel[0] + 1}..${sel[1]} · ${fmtBp(s.length)} · GC ${gcPercent(s).toFixed(1)}% · Tm ${fmtTm(meltingTemp(s))}`;
+  const segs = selSegs(doc), n = doc.seq.length; let left;
+  if (segs.length) {
+    const s = selText(doc);
+    left = `Selected ${segLabel(segs)}${doc.wrap ? ' (across the origin)' : ''} · ${fmtBp(s.length)} · GC ${gcPercent(s).toFixed(1)}% · Tm ${fmtTm(meltingTemp(s))}`;
   } else left = `Cursor after base ${doc.caret.toLocaleString('en-US')}`;
   if (UI.find.q) { const h = UI.find.res[UI.find.idx]; left += ` · Find: ${UI.find.res.length ? `${UI.find.idx >= 0 ? UI.find.idx + 1 : '–'} of ${UI.find.res.length}` : 'no matches'}${h ? (h.strand === 1 ? ' · forward strand (top)' : ' · reverse strand (bottom)') + (h.e > doc.seq.length ? ` · spans the origin (${h.s + 1}..${doc.seq.length} + 1..${h.e - doc.seq.length})` : '') : ''}`; }
   $('#stLeft').textContent = left;
@@ -139,7 +139,7 @@ function updateSideSel(doc) {
 }
 
 function renderInfo(doc, body) {
-  const sel = selRange(doc), s = sel ? doc.seq.slice(sel[0], sel[1]) : '';
+  const segs = selSegs(doc), sel = segs.length, s = selText(doc);
   const row = (k, v) => el('div', { class: 'kv' }, el('span', {}, k), el('b', {}, v));
   body.append(el('div', { class: 'info' },
     el('label', {}, 'Name', el('input', { value: doc.name, onchange: e => { doc.name = e.target.value.trim() || 'Untitled'; doc.dirty = true; requestUpdate(true); } })),
@@ -147,7 +147,7 @@ function renderInfo(doc, body) {
     row('Length', fmtBp(doc.seq.length)), row('GC content', gcPercent(doc.seq).toFixed(1) + '%'), row('Features', String(doc.features.length)),
     row('Unique cutters', String([...analyzeEnzymes(doc).values()].filter(r => r.cuts.length === 1).length)),
     el('h4', {}, 'Selection'),
-    sel ? el('div', {}, row('Range', `${sel[0] + 1}..${sel[1]}`), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm', fmtTm(meltingTemp(s))),
+    sel ? el('div', {}, row('Range', segLabel(segs) + (doc.wrap ? ' (across the origin)' : '')), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm', fmtTm(meltingTemp(s))),
       el('div', { class: 'small-note' }, tmConfText(), ' · ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'change')),
       el('div', { class: 'mono wrap' }, el('small', {}, 'Translation (frame 1)'), el('div', {}, translate(s).slice(0, 400) || '—'))) : el('div', { class: 'empty-note' }, 'Nothing selected.'),
     el('h4', {}, 'Tools'),
@@ -166,6 +166,7 @@ function renderInfo(doc, body) {
 /* ===== selection helpers ===== */
 function selectFeature(doc, f) {
   const segs = f.locs, mono = segs.every((l, i) => !i || l[0] >= segs[i - 1][1]);
+  if (!mono && doc.circular && segs.length === 2 && segs[0][1] === doc.seq.length && segs[1][0] === 0) return setSel(doc, segs[0][0], segs[1][1], f.id, true, true);   // feature across the origin
   const [a, b] = mono ? featBounds(f) : segs[0];
   setSel(doc, a, b, f.id);
 }
@@ -212,18 +213,18 @@ function contextMenu(e) {
   const fe = e.target.closest('[data-fid]');
   const hit = fe && featureById(doc, fe.dataset.fid);            // feature or ORF under the pointer
   if (hit) selectFeature(doc, hit);
-  const sel = selRange(doc), f = hit && doc.features.includes(hit) ? hit : null, ro = !App.editing;
+  const sel = selRange(doc), has = selSegs(doc).length > 0, f = hit && doc.features.includes(hit) ? hit : null, ro = !App.editing;
   const items = [
     { label: 'Cut', hint: MOD + 'X', disabled: !sel || ro, action: () => doCopy(doc, true) },
-    { label: 'Copy', hint: MOD + 'C', disabled: !sel, action: () => doCopy(doc) },
-    { label: 'Copy reverse complement', disabled: !sel, action: () => doCopyRC(doc) },
-    { label: 'Copy translation', disabled: !sel, action: () => copyTranslation(doc, false) },
-    { label: 'Copy translation on reverse strand', disabled: !sel, action: () => copyTranslation(doc, true) },
+    { label: 'Copy', hint: MOD + 'C', disabled: !has, action: () => doCopy(doc) },
+    { label: 'Copy reverse complement', disabled: !has, action: () => doCopyRC(doc) },
+    { label: 'Copy translation', disabled: !has, action: () => copyTranslation(doc, false) },
+    { label: 'Copy translation on reverse strand', disabled: !has, action: () => copyTranslation(doc, true) },
     ...(hit && (hit.type === 'CDS' || hit.orf) ? [{ label: `Copy feature translation (${hit.name})`, action: () => copyFeatureTranslation(doc, hit) }] : []),
     { label: 'Paste', hint: MOD + 'V', disabled: ro, action: () => doPaste(doc) },
     { label: 'Paste reverse complement', disabled: ro, action: () => doPaste(doc, true) },
     { label: 'Delete', hint: '⌫', disabled: !sel || ro, action: () => deleteSelection(doc) }, '-',
-    { label: 'Add feature from selection…', disabled: !sel, action: () => openFeatureDialog(doc) },
+    { label: 'Add feature from selection…', disabled: !has, action: () => openFeatureDialog(doc) },
     { label: 'Add primer by sequence…', action: () => openPrimerDialog(doc) },
   ];
   if (f) items.push({ label: `Edit “${f.name}”…`, action: () => openFeatureDialog(doc, f) }, { label: `Delete feature “${f.name}”`, action: () => removeFeature(doc, f.id) });
@@ -233,6 +234,7 @@ function contextMenu(e) {
     { label: 'Reverse-complement selection', disabled: !sel || ro, action: () => reverseComplementRange(doc, ...sel) },
     { label: 'Set origin here', disabled: !doc.circular || ro, action: () => setOrigin(doc, doc.caret) },
     { label: 'Insert sequence here…', disabled: ro, action: () => openInsertDialog(doc) },
+    { label: 'Select the other arc (across the origin)', disabled: !doc.circular || !has, action: () => setSel(doc, doc.anchor, doc.caret, null, true, !doc.wrap) },
     { label: 'Select all', hint: MOD + 'A', action: () => setSel(doc, 0, doc.seq.length) });
   showMenu(e.clientX, e.clientY, items);
 }
@@ -251,10 +253,10 @@ function parseRanges(text, n) {
 }
 
 function openFeatureDialog(doc, f) {
-  const sel = selRange(doc);
-  if (!f && !sel) return toast('Select a region of the sequence first');
+  const sel = selSegs(doc);
+  if (!f && !sel.length) return toast('Select a region of the sequence first');
   const isNew = !f;
-  const rangesDefault = f ? f.locs.map(l => `${l[0] + 1}..${l[1]}`).join(', ') : `${sel[0] + 1}..${sel[1]}`;
+  const rangesDefault = f ? f.locs.map(l => `${l[0] + 1}..${l[1]}`).join(', ') : sel.map(([a, b]) => `${a + 1}..${b}`).join(', ');
   const name = el('input', { value: f ? f.name : '', placeholder: 'e.g. My promoter' });
   const type = el('select', {}, FEATURE_TYPES.map(t => el('option', { value: t }, t)));
   type.value = f ? f.type : 'misc_feature';
@@ -445,8 +447,10 @@ function openInsertDialog(doc) {
 }
 
 function openGotoDialog(doc) {
-  const inp = el('input', { placeholder: 'e.g. 1500 or 1500..1800' });
+  const inp = el('input', { placeholder: 'e.g. 1500, 1500..1800, or 3900..100 (across the origin)' });
   openModal('Go to', field('Position or range (1-based)', inp), [{ label: 'Cancel' }, { label: 'Go', primary: true, action: () => {
+    const w = inp.value.trim().match(/^(\d+)\s*(?:\.\.|-|–|:)\s*(\d+)$/);
+    if (w && doc.circular && +w[1] > +w[2] && +w[1] <= doc.seq.length) { setSel(doc, +w[1] - 1, +w[2], null, true, true); return; }   // e.g. 380..20 = across the origin
     const l = parseRanges(inp.value, doc.seq.length); if (!l) { toast('Invalid position'); return false; }
     if (inp.value.match(/\.\.|-/)) setSel(doc, l[0][0], l[0][1]); else setSel(doc, l[0][1], l[0][1]);
   } }]);
@@ -635,13 +639,15 @@ function wireMap() {
     if (fe) { const f = doc.features.find(x => x.id === +fe.dataset.fid) || findORFs(doc, App.settings.orfMin).find(x => x.id === fe.dataset.fid); if (f) selectFeature(doc, f); return; }
     let pos;
     if (circ) { const c = circularPos(svg, e, n); if (c.r < 120 || c.r > 380) { return; } pos = c.pos; } else pos = linearPos(svg, e, n);
-    drag = { start: pos }; setSel(doc, pos, pos, null, false);
+    drag = { start: pos, last: pos, cross: 0 }; setSel(doc, pos, pos, null, false);
     e.preventDefault();
   });
   window.addEventListener('mousemove', e => {
     if (!drag) return; const doc = App.cur, svg = pane.querySelector('svg'); if (!svg) return;
     const n = doc.seq.length, pos = doc.circular ? circularPos(svg, e, n).pos : linearPos(svg, e, n);
-    setSel(doc, drag.start, pos, null, false);
+    // dragging round the ring through the origin selects the arc across it
+    if (doc.circular) { const d = pos - drag.last; if (d > n / 2) drag.cross--; else if (d < -n / 2) drag.cross++; drag.last = pos; }
+    setSel(doc, drag.start, pos, null, false, doc.circular && drag.cross !== 0);
   });
   window.addEventListener('mouseup', () => { drag = null; });
   pane.addEventListener('dblclick', e => { const fe = e.target.closest('[data-fid]'), doc = App.cur; if (fe && doc) { const f = doc.features.find(x => x.id === +fe.dataset.fid); if (f) openFeatureDialog(doc, f); } });
@@ -712,7 +718,7 @@ function wireKeys() {
       case 'End': e.preventDefault(); move(e.ctrlKey ? n : Math.min(n, (Math.floor(doc.caret / bpr) + 1) * bpr)); return;
       case 'PageUp': e.preventDefault(); move(doc.caret - bpr * 10); return;
       case 'PageDown': e.preventDefault(); move(doc.caret + bpr * 10); return;
-      case 'Escape': if (sel) setSel(doc, doc.caret, doc.caret); return;
+      case 'Escape': if (sel || doc.wrap) setSel(doc, doc.caret, doc.caret); return;
       case 'Backspace': e.preventDefault(); deleteSelection(doc, false); return;
       case 'Delete': e.preventDefault(); deleteSelection(doc, true); return;
     }

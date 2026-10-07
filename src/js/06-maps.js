@@ -39,15 +39,12 @@ function renderCircular(doc, host) {
   const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), n * 0.002);
   const lanes = Math.max(1, count), rTop = R + (lanes - 1) * LH + BH / 2 + 4;
   const ang = p => 2 * Math.PI * p / n;
-  const sel = selRange(doc);
+  const sel = selRange(doc), segs = selSegs(doc);
   const out = [];
   out.push(`<circle class="mp-ring" cx="${CCX}" cy="${CCY}" r="${R}" fill="none" stroke-width="3"/>`);
 
   // selection band
-  if (sel) {
-    const a1 = ang(sel[0]), a2 = ang(sel[1]);
-    out.push(`<path class="mp-sel" d="${arcSeg(R - 34, rTop + 6, a1, a2, 0, 0)}"/>`);
-  }
+  for (const [x, y] of segs) out.push(`<path class="mp-sel" d="${arcSeg(R - 34, rTop + 6, ang(x), Math.min(ang(y), 2 * Math.PI - 0.002), 0, 0)}"/>`);
   // ticks
   const step = niceStep(n, 12), minor = step / 5;
   for (let p = 0; p < n; p += minor) {
@@ -98,7 +95,7 @@ function renderCircular(doc, host) {
     }
   }
   // caret
-  if (!sel) {
+  if (!segs.length) {
     const a = ang(doc.caret), [x1, y1] = polar(R - 30, a), [x2, y2] = polar(rTop + 8, a);
     out.push(`<line class="mp-caret" x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}"/>`);
   }
@@ -106,7 +103,7 @@ function renderCircular(doc, host) {
   const nm = doc.name.length > 26 ? doc.name.slice(0, 25) + '…' : doc.name;
   out.push(`<text class="mp-title" x="${CCX}" y="${CCY - 16}" text-anchor="middle">${esc(nm)}</text>`);
   out.push(`<text class="mp-sub" x="${CCX}" y="${CCY + 12}" text-anchor="middle">${n.toLocaleString('en-US')} bp</text>`);
-  if (sel) out.push(`<text class="mp-sub small" x="${CCX}" y="${CCY + 36}" text-anchor="middle">${sel[0] + 1}..${sel[1]} · ${(sel[1] - sel[0]).toLocaleString('en-US')} bp selected</text>`);
+  if (segs.length) out.push(`<text class="mp-sub small" x="${CCX}" y="${CCY + 36}" text-anchor="middle">${segLabel(segs)} · ${segs.reduce((t, s) => t + s[1] - s[0], 0).toLocaleString('en-US')} bp selected</text>`);
   host.innerHTML = `<svg class="map circ" viewBox="0 0 ${CW} ${CH}" data-n="${n}" preserveAspectRatio="xMidYMid meet">${out.join('')}</svg>`;
 }
 
