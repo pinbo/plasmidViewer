@@ -35,7 +35,7 @@ function spreadLabels(items, gap, minY, maxY) {
 
 function renderCircular(doc, host) {
   const n = doc.seq.length, feats = visibleFeatures(doc);
-  const R = 215, BH = 22, LH = 25;
+  const R = 215, BH = 16.5, LH = 19.5;
   const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), n * 0.002);
   const lanes = Math.max(1, count), rTop = R + (lanes - 1) * LH + BH / 2 + 4;
   const ang = p => 2 * Math.PI * p / n;
@@ -84,7 +84,7 @@ function renderCircular(doc, host) {
   const sides = { 1: [], '-1': [] };
   for (const l of labels) { const s = Math.sin(l.theta) >= 0 ? 1 : -1; l.side = s; l.y = CCY - Rl * Math.cos(l.theta); sides[s].push(l); }
   for (const s of [1, -1]) {
-    spreadLabels(sides[s], 15, 22, CH - 22);
+    spreadLabels(sides[s], 18, 22, CH - 22);
     for (const l of sides[s]) {
       const dy = l.y - CCY, x = CCX + s * (Math.sqrt(Math.max(Rl * Rl - dy * dy, 0)) + 10);
       const [ax, ay] = polar(l.rr, l.theta);
@@ -141,7 +141,7 @@ function renderLinear(doc, host) {
 
   // features lanes
   const items = feats.map(f => {
-    const nameW = textWidth(f.name, font) + 8;
+    const nameW = textWidth(f.name, '700 16px system-ui, sans-serif') + 8;
     const [a, b] = featBounds(f); const bw = (X(b) - X(a));
     const inside = nameW <= bw - 14;
     const ivs = f.locs.concat(hangSegs(f, n)).map(([s, e]) => [X(s), X(e)]);
@@ -150,7 +150,7 @@ function renderLinear(doc, host) {
   });
   const { lane, count } = assignLanes(items.map(i => ({ id: i.id, ivs: i.ivs })), 3);
   const info = new Map(items.map(i => [i.id, i]));
-  const FH = 22, LH = 28, featY0 = baseY + 46;
+  const FH = 16.5, LH = 22.5, featY0 = baseY + 46;
   const H = featY0 + Math.max(1, count) * LH + 24;
 
   if (sel) out.push(`<rect class="mp-sel" x="${f2(X(sel[0]))}" y="${enzRows * EH + 10}" width="${f2(Math.max(1.5, X(sel[1]) - X(sel[0])))}" height="${H - enzRows * EH - 14}"/>`);
@@ -213,9 +213,9 @@ svg { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
 .mp-ticklbl { fill: #6a7686; font-size: 11px; }
 .mp-feat { stroke: rgba(0,0,0,.28); stroke-width: .8; }
 .mp-feat.orf { opacity: .55; }
-.mp-lbl { fill: #1d2530; font-size: 12.5px; font-weight: 700; }
+.mp-lbl { fill: #1d2530; font-size: 16px; font-weight: 700; }
 .mp-lbl.enz { fill: #1c55c7; font-weight: 600; font-size: 12px; }
-.mp-flbl { font-size: 12px; font-weight: 600; }
+.mp-flbl { font-size: 15px; font-weight: 600; }
 .mp-hang { fill: none; stroke-width: 2; stroke-linejoin: round; cursor: pointer; }
 .mp-hang.hov, .mp-hang.on { stroke: #e5322d; }
 .mp-lead { fill: none; stroke: #6a7686; stroke-width: .8; opacity: .55; pointer-events: none; }
