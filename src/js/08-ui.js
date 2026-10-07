@@ -28,7 +28,7 @@ function update(full) {
   if (App.settings.view !== 'seq') renderMap(doc);
   if (App.settings.view !== 'map') renderSeq(doc, false);
   renderMini(doc);
-  if (full) renderSide(doc); else updateSideSel(doc);
+  if (full || App.settings.sideTab === 'info') renderSide(doc); else updateSideSel(doc);   // the Info tab shows the selection, so it follows it live
   renderToolbarState(doc);
   renderStatus(doc);
 }
@@ -57,7 +57,7 @@ function renderStatus(doc) {
     const s = doc.seq.slice(sel[0], sel[1]);
     left = `Selected ${sel[0] + 1}..${sel[1]} · ${fmtBp(s.length)} · GC ${gcPercent(s).toFixed(1)}% · Tm ${fmtTm(meltingTemp(s))}`;
   } else left = `Cursor after base ${doc.caret.toLocaleString('en-US')}`;
-  if (UI.find.q) { const h = UI.find.res[UI.find.idx]; left += ` · Find: ${UI.find.res.length ? `${UI.find.idx >= 0 ? UI.find.idx + 1 : '–'} of ${UI.find.res.length}` : 'no matches'}${h ? (h.strand === 1 ? ' · forward strand (top)' : ' · reverse strand (bottom)') : ''}`; }
+  if (UI.find.q) { const h = UI.find.res[UI.find.idx]; left += ` · Find: ${UI.find.res.length ? `${UI.find.idx >= 0 ? UI.find.idx + 1 : '–'} of ${UI.find.res.length}` : 'no matches'}${h ? (h.strand === 1 ? ' · forward strand (top)' : ' · reverse strand (bottom)') + (h.e > doc.seq.length ? ` · spans the origin (${h.s + 1}..${doc.seq.length} + 1..${h.e - doc.seq.length})` : '') : ''}`; }
   $('#stLeft').textContent = left;
   const bad = badBases(doc).length, w = $('#stWarn'); w.hidden = !bad; if (bad) w.textContent = `⚠ ${bad.toLocaleString('en-US')} non-ATGC`;
   $('#stRight').textContent = `${doc.circular ? 'Circular' : 'Linear'} · ${fmtBp(n)} · ${doc.features.length} features · GC ${gcPercent(doc.seq).toFixed(1)}%`;
@@ -147,7 +147,7 @@ function renderInfo(doc, body) {
     row('Length', fmtBp(doc.seq.length)), row('GC content', gcPercent(doc.seq).toFixed(1) + '%'), row('Features', String(doc.features.length)),
     row('Unique cutters', String([...analyzeEnzymes(doc).values()].filter(r => r.cuts.length === 1).length)),
     el('h4', {}, 'Selection'),
-    sel ? el('div', {}, row('Range', `${sel[0] + 1}..${sel[1]}`), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm (primer3)', fmtTm(meltingTemp(s))),
+    sel ? el('div', {}, row('Range', `${sel[0] + 1}..${sel[1]}`), row('Length', fmtBp(s.length)), row('GC', gcPercent(s).toFixed(1) + '%'), row('Tm', fmtTm(meltingTemp(s))),
       el('div', { class: 'small-note' }, tmConfText(), ' · ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'change')),
       el('div', { class: 'mono wrap' }, el('small', {}, 'Translation (frame 1)'), el('div', {}, translate(s).slice(0, 400) || '—'))) : el('div', { class: 'empty-note' }, 'Nothing selected.'),
     el('h4', {}, 'Tools'),
@@ -307,7 +307,7 @@ function openPrimerDialog(doc) {
     if (!s) { info.textContent = ''; return; }
     if (/[^ACGT]/.test(s)) { info.textContent = 'Only A, C, G, T are supported.'; return; }
     hit = findPrimerSite(doc, s, Math.max(8, +min.value || 15));
-    info.textContent = hit ? `Binds the ${hit.strand === 1 ? 'top' : 'bottom'} strand at ${hit.pos + 1}..${hit.pos + hit.L} with its 3′ ${hit.L} nt${hit.L < s.length ? `; the 5′ ${s.length - hit.L} nt do not match and are drawn as a zigzag` : ' (full match)'}${hit.count > 1 ? `. ${hit.count} binding sites found – the first is used` : ''}. Tm of binding part: ${fmtTm(tmPrimer3(s.slice(s.length - hit.L)))}.` : `No match of at least ${min.value} nt at the 3′ end was found.`;
+    info.textContent = hit ? `Binds the ${hit.strand === 1 ? 'top' : 'bottom'} strand at ${hit.pos + 1}..${hit.pos + hit.L} with its 3′ ${hit.L} nt${hit.L < s.length ? `; the 5′ ${s.length - hit.L} nt do not match and are drawn as a zigzag` : ' (full match)'}${hit.count > 1 ? `. ${hit.count} binding sites found – the first is used` : ''}. Tm of binding part: ${fmtTm(tmPrimer(s.slice(s.length - hit.L)))}.` : `No match of at least ${min.value} nt at the 3′ end was found.`;
   };
   ta.addEventListener('input', upd); min.addEventListener('input', upd);
   const body = el('div', { class: 'form' }, field('Name', name), field("Primer sequence (5′→3′)", ta), field('Minimum 3′ match (nt)', min), info);
@@ -424,12 +424,14 @@ function liveWarn(ta) {
 function openTmDialog() {
   const c = tmConf(), num = (v, step) => el('input', { type: 'number', min: 0, step, value: v });
   const mv = num(c.mv, 1), dv = num(c.dv, 0.1), dntp = num(c.dntp, 0.1), dna = num(c.dna, 10);
+  const method = el('select', {}, el('option', { value: 'primer3' }, 'primer3 (adjustable salt / oligo conditions)'), el('option', { value: 'q5' }, 'NEB Q5 (as in the NEB Tm Calculator)')); method.value = c.method;
   const body = el('div', { class: 'form' },
+    field('Tm method', method, 'The NEB Q5 method uses fixed conditions (500 nM primer, 150 mM salt); the salt / oligo fields below only apply to primer3.'),
     el('div', { class: 'two' }, field('Monovalent cations, Na⁺/K⁺ (mM)', mv), field('Divalent cations, Mg²⁺ (mM)', dv)),
     el('div', { class: 'two' }, field('dNTPs (mM)', dntp), field('Oligo concentration (nM)', dna)),
     el('div', { class: 'small-note' }, 'Tm is calculated as in primer3 (SantaLucia 1998 nearest-neighbour thermodynamics and salt correction; Mg²⁺ is converted to an equivalent monovalent concentration; sequences over 60 nt use primer3’s GC-content formula). Defaults match primer3: 50 mM, 1.5 mM, 0.6 mM, 50 nM.'));
   openModal('Tm settings', body, [{ label: 'Defaults', action: () => { store.set('tmConf', {}); requestUpdate(true); toast('Tm conditions reset'); } }, { label: 'Cancel' }, { label: 'Save', primary: true, action: () => {
-    store.set('tmConf', { mv: Math.max(0, +mv.value || 0), dv: Math.max(0, +dv.value || 0), dntp: Math.max(0, +dntp.value || 0), dna: Math.max(1, +dna.value || 50) }); requestUpdate(true);
+    store.set('tmConf', { method: method.value, mv: Math.max(0, +mv.value || 0), dv: Math.max(0, +dv.value || 0), dntp: Math.max(0, +dntp.value || 0), dna: Math.max(1, +dna.value || 50) }); requestUpdate(true);
     } }]);
 }
 
@@ -522,7 +524,7 @@ function runFind(dir) {
   let idx;
   if (dir > 0) { idx = f.res.findIndex(r => r.s > base); if (idx < 0) idx = 0; }
   else { idx = -1; f.res.forEach((r, i) => { if (r.s < base) idx = i; }); if (idx < 0) idx = f.res.length - 1; }
-  f.idx = idx; setSel(doc, f.res[idx].s, f.res[idx].e);
+  f.idx = idx; setSel(doc, f.res[idx].s, Math.min(f.res[idx].e, doc.seq.length));   // a match across the origin: its first part is selected, the rest is highlighted at the start
 }
 
 /* ===== file I/O ===== */

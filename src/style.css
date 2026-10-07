@@ -161,6 +161,12 @@ svg.map.lin { width: auto; height: auto; }
 .fbar.arR { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); padding-right: 10px; }
 .fbar.arL { clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); padding-left: 10px; }
 .fbar.orf { opacity: .55; }
+/* Golden Gate enzyme picker: aligned grid, one enzyme per cell, never wrapped */
+.enzgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 3px 10px; max-height: 130px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.enzgrid label.chk { display: grid; grid-template-columns: 16px 56px 1fr; align-items: center; gap: 4px; margin: 0; white-space: nowrap; }
+.enzgrid label.chk input { margin: 0; }
+.enzgrid label.chk b { font-weight: 600; }
+.enzgrid label.chk small { color: var(--muted); }
 .fbrk { display: none; position: absolute; pointer-events: none; z-index: 3; }
 .fbrk.bl::before, .fbrk.br::after { content: ''; position: absolute; top: 0; bottom: 0; width: 6px; border: 2px solid #e5322d; box-sizing: border-box; }
 .fbrk.bl::before { left: 0; border-right: 0; }
@@ -184,15 +190,17 @@ svg.map.lin { width: auto; height: auto; }
 .mp-flbl.hov { fill: #fff; stroke: #e5322d; stroke-width: 3px; paint-order: stroke; }
 .fhang.hov polyline { stroke: #e5322d !important; }
 .fbar.hov { box-shadow: inset 0 0 0 2px #e5322d; }
-/* arrow-headed bars are clipped, so the box-shadow outline is cut off at the point: draw a closed outline with two stacked clipped layers instead */
-.fbar.arR.hov, .fbar.arL.hov, .fbar.arR.on, .fbar.arL.on { box-shadow: none; --oc: #e5322d; }
-.fbar.arR.on:not(.hov), .fbar.arL.on:not(.hov) { --oc: var(--text); }
-.fbar.arR.hov::before, .fbar.arL.hov::before, .fbar.arR.on::before, .fbar.arL.on::before { content: ''; position: absolute; inset: 0; background: var(--oc); z-index: -2; }
-.fbar.arR.hov::after, .fbar.arL.hov::after, .fbar.arR.on::after, .fbar.arL.on::after { content: ''; position: absolute; inset: 2px; background: inherit; z-index: -1; }
-.fbar.arR.hov::before, .fbar.arR.on::before { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); }
-.fbar.arL.hov::before, .fbar.arL.on::before { clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); }
-.fbar.arR.hov::after, .fbar.arR.on::after { clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%); }
-.fbar.arL.hov::after, .fbar.arL.on::after { clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%); }
+/* arrow-headed bars are clipped, so a box-shadow outline is cut off at the point: draw a closed outline with two stacked clipped layers instead (default grey, red on hover, dark when selected) */
+.fbar.arR, .fbar.arL { box-shadow: none; --oc: rgba(0,0,0,.3); --ow: 1px; }
+.fbar.arR.hov, .fbar.arL.hov, .fbar.arR.on, .fbar.arL.on { --ow: 2px; }
+.fbar.arR.on, .fbar.arL.on { --oc: var(--text); }
+.fbar.arR.hov, .fbar.arL.hov { --oc: #e5322d; }
+.fbar.arR::before, .fbar.arL::before { content: ''; position: absolute; inset: 0; background: var(--oc); z-index: -2; }
+.fbar.arR::after, .fbar.arL::after { content: ''; position: absolute; inset: var(--ow); background: inherit; z-index: -1; }
+.fbar.arR::before { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); }
+.fbar.arL::before { clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); }
+.fbar.arR::after { clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%); }
+.fbar.arL::after { clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%); }
 #tip, #aaTip { display: none; position: fixed; z-index: 90; pointer-events: none; min-width: 190px; max-width: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 9px 12px; font-size: 12px; }
 #tip .th, #aaTip .th { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
 #tip .th i, #aaTip .th i { width: 10px; height: 10px; border-radius: 3px; flex: none; }

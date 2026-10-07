@@ -74,7 +74,7 @@ function gcPercent(s) { if (!s.length) return 0; let g = 0; for (const c of s) i
 const NN_PARAMS = { AA: [-7.9, -22.2], TT: [-7.9, -22.2], AT: [-7.2, -20.4], TA: [-7.2, -21.3], CA: [-8.5, -22.7], TG: [-8.5, -22.7], GT: [-8.4, -22.4], AC: [-8.4, -22.4],
   CT: [-7.8, -21.0], AG: [-7.8, -21.0], GA: [-8.2, -22.2], TC: [-8.2, -22.2], CG: [-10.6, -27.2], GC: [-9.8, -24.4], GG: [-8.0, -19.9], CC: [-8.0, -19.9] };
 const TM_DEFAULTS = { mv: 50, dv: 1.5, dntp: 0.6, dna: 50 };    // mM Na+/K+, mM Mg2+, mM dNTP, nM oligo (primer3 defaults)
-const tmConf = () => Object.assign({}, TM_DEFAULTS, store.get('tmConf', {}));
+const tmConf = () => Object.assign({ method: 'primer3' }, TM_DEFAULTS, store.get('tmConf', {}));
 function tmPrimer3(seq, c = tmConf()) {
   const s = String(seq).toUpperCase(), n = s.length;
   if (n < 2 || /[^ACGT]/.test(s)) return NaN;
@@ -88,9 +88,25 @@ function tmPrimer3(seq, c = tmConf()) {
   S += 0.368 * (n - 1) * Math.log(mv / 1000);
   return H * 1000 / (S + 1.9872 * Math.log(c.dna * 1e-9 / (sym ? 1 : 4))) - 273.15;
 }
-const meltingTemp = s => tmPrimer3(s);
+/* NEB Tm Calculator, Q5 settings (reverse-engineered from tmcalculator.neb.com v1.17): SantaLucia 1998 nearest-neighbour thermodynamics at 1 M Na+ with
+   500 nM primer (plain Ct, no Ct/4) and the Owczarzy 2004 monovalent salt correction for the 150 mM Q5 buffer; no length cut-off, no Mg2+ term. */
+function tmQ5(seq) {
+  const s = String(seq).toUpperCase(), n = s.length;
+  if (n < 2 || /[^ACGT]/.test(s)) return NaN;
+  let H = 0, S = 0, gc = 0;
+  for (let i = 0; i < n - 1; i++) { const v = NN_PARAMS[s.substr(i, 2)]; H += v[0] * 1000; S += v[1]; }
+  for (const ch of s) if (ch === 'G' || ch === 'C') gc++;
+  for (const ch of [s[0], s[n - 1]]) { if (ch === 'G' || ch === 'C') { H += 100; S -= 2.8; } else { H += 2300; S += 4.1; } }
+  if (s === revcomp(s)) S -= 1.4;
+  const na = 0.150, ln = Math.log(na), fgc = gc / n;
+  const t1M = H / (S + 1.9872 * Math.log(500e-9));
+  return 1 / (1 / t1M + 1e-5 * (4.29 * fgc - 3.95) * ln + 9.4e-6 * ln * ln) - 273.15;
+}
+/* the Tm used throughout the app: primer3 (adjustable conditions) or NEB Q5 */
+const tmPrimer = (seq, c = tmConf()) => c.method === 'q5' ? tmQ5(seq) : tmPrimer3(seq, c);
+const meltingTemp = s => tmPrimer(s);
 const fmtTm = t => (Number.isFinite(t) ? t.toFixed(1) + ' °C' : '—');
-const tmConfText = (c = tmConf()) => `primer3 method · ${c.mv} mM Na⁺, ${c.dv} mM Mg²⁺, ${c.dntp} mM dNTP, ${c.dna} nM oligo`;
+const tmConfText = (c = tmConf()) => c.method === 'q5' ? 'NEB Tm Calculator method for Q5 (SantaLucia 1998, 500 nM primer, 150 mM Na⁺ equivalent)' : `primer3 method · ${c.mv} mM Na⁺, ${c.dv} mM Mg²⁺, ${c.dntp} mM dNTP, ${c.dna} nM oligo`;
 
 /* ---------- feature colours / types ---------- */
 const TYPE_COLORS = {

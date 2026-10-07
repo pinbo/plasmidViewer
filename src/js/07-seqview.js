@@ -161,9 +161,10 @@ function updateSeqSelection(doc) {
   };
   const F = (typeof UI !== 'undefined' && UI.find && UI.find.q) ? UI.find : null;
   const curHit = F && F.idx >= 0 ? F.res[F.idx] : null;
-  const curIsSel = !!(curHit && sel && sel[0] === curHit.s && sel[1] === curHit.e);
-  if (F && F.res.length <= 3000) for (const m of F.res) if (!(curIsSel && m === curHit)) box(m.s, m.e, 'fm', m.strand);
-  if (curIsSel) box(curHit.s, curHit.e, 'fm cur', curHit.strand);
+  const hitBox = (h, cls) => { if (h.e > n) { box(h.s, n, cls, h.strand); box(0, h.e - n, cls, h.strand); } else box(h.s, h.e, cls, h.strand); };   // a match across the origin is drawn at both ends
+  const curIsSel = !!(curHit && sel && sel[0] === curHit.s && sel[1] === Math.min(curHit.e, n));
+  if (F && F.res.length <= 3000) for (const m of F.res) if (!(curIsSel && m === curHit)) hitBox(m, 'fm');
+  if (curIsSel) hitBox(curHit, 'fm cur');
   else if (sel) box(sel[0], sel[1], 'selbox');
   if (!sel) {
     const r = seqRowOfPos(doc.caret), col = doc.caret - r * bpr;

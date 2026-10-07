@@ -3,7 +3,7 @@
    Every design works on opened plasmids and returns the final plasmid (sequence + carried-over features) plus the primers. */
 
 /* ===== primer helpers ===== */
-const primerTm = seq => { const t = tmPrimer3(seq); return Number.isFinite(t) ? t : 0; };   // primer3-method Tm (conditions: see Tm settings)
+const primerTm = seq => { const t = tmPrimer(seq); return Number.isFinite(t) ? t : 0; };   // primer3-method Tm (conditions: see Tm settings)
 /* gene-specific 5' part of a primer: shortest 18–40 nt stretch reaching the target Tm, preferring a G/C 3' end */
 function pickGS(seq, target) {
   seq = seq.toUpperCase();
@@ -111,13 +111,15 @@ function ggParams(e) { const end = e.len - e.trail; return { a: e.top - end, b: 
 function goldenGateEligible(e) { const { a, b } = ggParams(e); return !e.palin && a >= 0 && b > a && b - a <= 5; }
 const GG_OVERHANGS = ['AATG', 'GCTT', 'GGAG', 'TACT', 'CAGC', 'CGCT', 'AGGT', 'GCAG', 'TGCC', 'ACTA', 'TTAC', 'CCAA', 'GTTC', 'ATCC', 'CTCG', 'TCGA'];
 
-/* opts: vec, enzyme (name), parts, tm, pad, keep ('auto'|'A'|'B'), internal (array of user overhangs, may be empty) */
+/* opts: vec, enzyme (name of the enzyme whose site the primers carry), enzymes (optional: names of all enzymes that cut the vector), parts, tm, pad, keep ('auto'|'A'|'B'), internal (array of user overhangs, may be empty) */
 function designGoldenGate(o) {
   const { vec, parts } = o, notes = [], warnings = [];
   const e = ENZYMES.find(x => x.name === o.enzyme); if (!e || !goldenGateEligible(e)) throw new Error('Choose a Type IIS enzyme that cuts downstream of its site and leaves a 5′ overhang.');
   const { a, b, core } = ggParams(e), ovLen = b - a;
-  const res = analyzeEnzymes(vec).get(e.name), cuts = res ? res.cuts : [];
-  if (cuts.length !== 2) throw new Error(`${e.name} cuts this vector ${cuts.length} time${cuts.length === 1 ? '' : 's'}; a Golden Gate destination vector needs exactly 2 sites flanking the dropout region.`);
+  const encs = (o.enzymes && o.enzymes.length ? o.enzymes : [o.enzyme]).map(n => ENZYMES.find(x => x.name === n)).filter(Boolean), encNames = encs.map(x => x.name).join(' + ');
+  if (!encs.includes(e)) encs.push(e);
+  const cuts = encs.flatMap(en => ((analyzeEnzymes(vec).get(en.name) || { cuts: [] }).cuts).map(c => ({ ...c, enz: en.name })));
+  if (cuts.length !== 2) throw new Error(`${encNames} cut${encs.length > 1 ? '' : 's'} this vector ${cuts.length} time${cuts.length === 1 ? '' : 's'}; a Golden Gate destination vector needs exactly 2 sites flanking the dropout region.`);
   const [j1, j2] = cuts.slice().sort((x, y) => x.top - y.top);
   const lo = j => Math.min(j.top, j.bot), hi = j => Math.max(j.top, j.bot), n = vec.seq.length;
   const inA = c => c.s >= lo(j1) && c.e <= hi(j2) + 0;   // fragment A = j1 → j2 (no origin crossing)
@@ -130,7 +132,7 @@ function designGoldenGate(o) {
   // retained path runs rs → le; the insert is placed between le and rs
   const rs = keep === 'A' ? j1 : j2, le = keep === 'A' ? j2 : j1;
   const U = vec.seq.toUpperCase(), ovL = U.slice(lo(le), hi(le)), ovR = U.slice(lo(rs), hi(rs));
-  if (ovL.length !== ovLen || ovR.length !== ovLen) throw new Error('Unexpected overhang length at a vector cut.');
+  if (ovL.length !== ovLen || ovR.length !== ovLen) throw new Error(`The vector overhangs are ${ovL.length} and ${ovR.length} nt (${le.enz} / ${rs.enz}) but ${e.name} (used in the primers) leaves ${ovLen}-nt overhangs – choose a primer enzyme that matches the vector sites.`);
   const keepFrom = hi(rs), keepTo = lo(le);
   const retainedLen = keepTo >= keepFrom ? keepTo - keepFrom : n - keepFrom + keepTo;
   if (retainedLen < 100) warnings.push('The retained backbone is very short – you may have chosen the wrong fragment.');
@@ -151,8 +153,8 @@ function designGoldenGate(o) {
   const spacer = 'ACGT'.slice(0, a), pad = (o.pad || '').toUpperCase().replace(/[^ACGT]/g, ''), head = pad + core + spacer, primers = [];
   parts.forEach((p, i) => {
     const Up = p.text.toUpperCase(), gsF = pickGS(Up, o.tm), gsR = pickGS(revcomp(Up), o.tm);
-    const hits = [...Up.matchAll(e.regex)].length + (e.palin ? 0 : [...Up.matchAll(e.rcRegex)].length);
-    if (hits) warnings.push(`Insert “${p.name}” contains ${hits} ${e.name} site${hits > 1 ? 's' : ''} – it would be cut during assembly. Remove it (silent mutation) first.`);
+    for (const en of encs) { const hits = [...Up.matchAll(en.regex)].length + (en.palin ? 0 : [...Up.matchAll(en.rcRegex)].length);
+      if (hits) warnings.push(`Insert “${p.name}” contains ${hits} ${en.name} site${hits > 1 ? 's' : ''} – it would be cut during assembly. Remove it (silent mutation) first.`); }
     primers.push({ name: `${p.name}_F`, seq: head + junc[i] + gsF, tail: junc[i].length, gs: gsF, strand: 1, part: i, ov: junc[i] },
       { name: `${p.name}_R`, seq: head + revcomp(junc[i + 1]) + gsR, tail: junc[i + 1].length, gs: gsR, strand: -1, part: i, ov: junc[i + 1] });
   });
@@ -167,8 +169,80 @@ function designGoldenGate(o) {
     feats.push(primerFeature(pr.name, pr.seq, pr.strand, locs, null, head.length));   // pad + site + spacer are cut off, only overhang + binding part remain
   });
   if (asm.dropped) warnings.push(`${asm.dropped} vector feature(s) lie in the dropout region or span a cut and were not carried over.`);
-  notes.push(`${e.name} (${core}, ${a} nt spacer, ${ovLen}-nt 5′ overhang). Vector overhangs: ${ovL} → insert → ${ovR}. Primers = ${pad ? pad + ' + ' : ''}${core} + ${spacer} + overhang + gene-specific sequence; the pad, site and spacer are removed by the digestion and are not in the final plasmid. Junction overhangs: ${junc.join(' | ')}.`);
-  return { seq: asm.seq, circular: vec.circular, features: feats, primers, notes, warnings, method: 'Golden Gate (' + e.name + ')' };
+  notes.push(`${encs.length > 1 ? `Vector cut by ${encNames}; primers use ${e.name}. ` : ''}${e.name} (${core}, ${a} nt spacer, ${ovLen}-nt 5′ overhang). Vector overhangs: ${ovL} → insert → ${ovR}. Primers = ${pad ? pad + ' + ' : ''}${core} + ${spacer} + overhang + gene-specific sequence; the pad, site and spacer are removed by the digestion and are not in the final plasmid. Junction overhangs: ${junc.join(' | ')}.`);
+  return { seq: asm.seq, circular: vec.circular, features: feats, primers, notes, warnings, method: 'Golden Gate (' + encNames + ')' };
+}
+
+/* ----- Golden Gate between existing plasmids: digest every plasmid with the chosen enzyme(s) and ligate the compatible fragments ----- */
+/* opts: docs (circular plasmids), enzymes (names) */
+function designGGPlasmids(o) {
+  const notes = [], warnings = [], docs = o.docs;
+  const encs = (o.enzymes || []).map(n => ENZYMES.find(x => x.name === n)).filter(Boolean);
+  if (!encs.length) throw new Error('Choose at least one Type IIS enzyme.');
+  if (docs.length < 2) throw new Error('Choose at least two plasmids.');
+  const encNames = encs.map(e => e.name).join(' + '), frags = [];
+  docs.forEach((doc, di) => {
+    if (!doc.circular) throw new Error(`“${doc.name}” is a linear sequence – only circular plasmids can be assembled this way.`);
+    const U = doc.seq, n = U.length, cuts = [];
+    for (const e of encs) { const r = analyzeEnzymes(doc).get(e.name); if (r) for (const c of r.cuts) cuts.push({ top: c.top, len: c.bot - c.top, enz: e }); }
+    if (!cuts.length) throw new Error(`“${doc.name}” has no ${encNames} site.`);
+    for (const c of cuts) if (c.len <= 0) c.len = (c.len + n) % n;
+    cuts.sort((x, y) => x.top - y.top);
+    const slice = (a, l) => { let t = ''; for (let i = 0; i < l; i++) t += U[(a + i) % n]; return t; };
+    cuts.forEach((c, i) => {
+      const nx = cuts[(i + 1) % cuts.length], len = ((nx.top - c.top + n) % n) || n, full = len + nx.len, text = slice(c.top, full);
+      const U2 = text.toUpperCase();
+      let sites = 0; for (const e of encs) sites += [...U2.matchAll(e.regex)].length + (e.palin ? 0 : [...U2.matchAll(e.rcRegex)].length);
+      const tl = Math.min(full, n), ranges = c.top + tl <= n ? [{ a: c.top, b: c.top + tl, off: 0 }] : [{ a: c.top, b: n, off: 0 }, { a: 0, b: c.top + tl - n, off: n - c.top }];
+      const feats = carryFeatures(doc, ranges).feats;
+      frags.push({ doc, di, idx: frags.length, start: c.top, len, text, sites, feats, lov: U2.slice(0, c.len), rov: U2.slice(len), lLen: c.len, rLen: nx.len });
+    });
+  });
+  const usable = frags.filter(f => !f.sites);
+  if (usable.length < 2) throw new Error('Fewer than two fragments are free of recognition sites after digestion – nothing can be assembled (check that the sites point away from the fragments you want to keep).');
+  const ends = (f, rc) => rc ? { l: revcomp(f.rov), r: revcomp(f.lov) } : { l: f.lov, r: f.rov };
+  const cycles = [];
+  const dfs = (path, used, start) => {
+    if (cycles.length >= 200) return;
+    const last = path[path.length - 1], r = ends(last.f, last.rc).r;
+    if (path.length > 1 && r === ends(path[0].f, false).l) cycles.push(path.slice());
+    if (path.length >= 12) return;
+    for (const g of usable) {
+      if (used.has(g.idx) || g.idx < start.idx) continue;
+      for (const rc of [false, true]) { if (ends(g, rc).l !== r) continue; used.add(g.idx); path.push({ f: g, rc }); dfs(path, used, start); path.pop(); used.delete(g.idx); }
+    }
+  };
+  for (const f of usable) {
+    // a fragment that closes on itself (one cut site pair with identical ends) is a single-piece circle
+    dfs([{ f, rc: false }], new Set([f.idx]), f);
+  }
+  const score = c => new Set(c.map(x => x.f.di)).size * 1000 + c.length;
+  const good = cycles.filter(c => new Set(c.map(x => x.f.di)).size > 1);
+  if (!good.length) throw new Error(`No circular assembly joins fragments from more than one plasmid: the ${encNames} overhangs of the plasmids do not match (or the product would still contain sites).`);
+  good.sort((x, y) => score(y) - score(x));
+  const top = good.filter(c => score(c) === score(good[0]));
+  let cyc = good[0].slice();
+  // start at the largest fragment, read in its own orientation
+  let bi = 0; cyc.forEach((x, i) => { if (x.f.len > cyc[bi].f.len) bi = i; });
+  if (cyc[bi].rc) cyc = cyc.reverse().map(x => ({ f: x.f, rc: !x.rc }));
+  bi = 0; cyc.forEach((x, i) => { if (x.f.len > cyc[bi].f.len) bi = i; });
+  cyc = cyc.slice(bi).concat(cyc.slice(0, bi));
+  const parts = cyc.map(({ f, rc }) => {
+    let clip = { text: f.text, features: f.feats.map(cloneFeat) };
+    if (rc) clip = revcompClip(clip);
+    const keep = clip.text.length - (rc ? f.lLen : f.rLen);
+    return { text: clip.text.slice(0, keep), features: clip.features.filter(x => x.locs.every(([a, b]) => b <= keep)) };
+  });
+  const mid = joinParts(parts);
+  const seq = mid.text;
+  for (const x of cyc) notes.push(`${x.f.doc.name}: ${x.f.start + 1}→${((x.f.start + x.f.len - 1) % x.f.doc.seq.length) + 1} (${x.f.len.toLocaleString('en-US')} bp)${x.rc ? ', reverse-complemented' : ''}; overhangs ${ends(x.f, x.rc).l} … ${ends(x.f, x.rc).r}`);
+  notes.unshift(`Assembly of ${new Set(cyc.map(x => x.f.di)).size} plasmids with ${encNames}. Fragments joined, in order:`);
+  if (top.length > 1) warnings.push(`${top.length} different assemblies are possible with these plasmids and enzymes; the one starting with the largest fragment is shown. Use fewer plasmids or enzymes with distinct overhangs to make it unique.`);
+  const used = new Set(cyc.map(x => x.f.idx)), leftover = frags.filter(f => f.sites).length;
+  if (leftover) notes.push(`${leftover} fragment(s) still carrying recognition sites (e.g. the dropout or the excised vector parts) are re-cut and left out of the product.`);
+  const lead = cyc[0].f.doc.name.replace(/_rc$/, ''), rest = [...new Set(cyc.map(x => x.f.doc.name).filter(nm => nm !== cyc[0].f.doc.name))];
+  for (const e of encs) { const hits = [...seq.toUpperCase().matchAll(e.regex)].length + (e.palin ? 0 : [...seq.toUpperCase().matchAll(e.rcRegex)].length); if (hits) warnings.push(`The product still contains ${hits} ${e.name} site${hits > 1 ? 's' : ''}.`); }
+  return { seq, circular: true, features: mid.features, primers: [], notes, warnings, method: 'Golden Gate (' + encNames + ', plasmids)', name: [lead, ...rest].join('_') };
 }
 
 /* ===================== Gateway (BP / LR) ===================== */
@@ -294,12 +368,27 @@ function openCloningDialog() {
     const uq = list.filter(o => o.k === 1).length;
     ctl.enzInfo.textContent = `${uq} unique cutter${uq === 1 ? '' : 's'}${list.length > uq ? ` + ${list.length - uq} site(s) of your selected enzymes` : ''} in ${d.name}`;
   };
+  /* Golden Gate: enzymes are chosen with checkboxes (several at once); labels show how often each cuts the vector / the chosen plasmids */
+  const ggChecked = new Set(['BsaI']);
+  const ggList = () => ENZYMES.filter(goldenGateEligible).sort((a, b) => (GOLDEN_GATE.has(b.name) - GOLDEN_GATE.has(a.name)) || a.name.localeCompare(b.name));
+  const ggCount = (d, name) => ((analyzeEnzymes(d).get(name) || { cuts: [] }).cuts).length;
   const fillGG = () => {
-    const d = getDoc(ctl.vec), res = analyzeEnzymes(d), v = ctl.ggEnz.value; ctl.ggEnz.innerHTML = '';
-    const list = ENZYMES.filter(goldenGateEligible).sort((a, b) => (GOLDEN_GATE.has(b.name) - GOLDEN_GATE.has(a.name)) || a.name.localeCompare(b.name));
-    for (const e of list) { const k = (res.get(e.name) || { cuts: [] }).cuts.length; ctl.ggEnz.append(el('option', { value: e.name }, `${e.name}  (${k} site${k === 1 ? '' : 's'} in vector)`)); }
-    const best = list.find(e => (res.get(e.name) || { cuts: [] }).cuts.length === 2 && GOLDEN_GATE.has(e.name)) || list.find(e => (res.get(e.name) || { cuts: [] }).cuts.length === 2);
-    ctl.ggEnz.value = v && list.some(e => e.name === v) && v !== '' ? v : (best ? best.name : 'BsaI');
+    if (!ctl.enzPick) return;
+    const plasmid = ctl.ggMode.value === 'plasmid', ds = plasmid ? ctl.plSel.filter(x => x.cb.checked).map(x => x.doc) : [getDoc(ctl.vec)];
+    ctl.enzPick.innerHTML = '';
+    for (const e of ggList()) {
+      const cnt = ds.map(d => ggCount(d, e.name)), used = cnt.some(k => k > 0);
+      if (!GOLDEN_GATE.has(e.name) && !used && !ggChecked.has(e.name)) continue;      // keep the list short: common enzymes + anything that cuts
+      const cb = el('input', { type: 'checkbox', checked: ggChecked.has(e.name) || undefined, onchange: () => { cb.checked ? ggChecked.add(e.name) : ggChecked.delete(e.name); fillPrim(); } });
+      ctl.enzPick.append(el('label', { class: 'chk' }, cb, el('b', {}, e.name), el('small', {}, `${cnt.join(' / ')} site${cnt.length === 1 && cnt[0] === 1 ? '' : 's'}`)));
+    }
+    fillPrim();
+  };
+  const fillPrim = () => {
+    if (!ctl.ggEnz) return;
+    const v = ctl.ggEnz.value, names = ggList().filter(e => ggChecked.has(e.name)).map(e => e.name); ctl.ggEnz.innerHTML = '';
+    for (const n of names) ctl.ggEnz.append(el('option', { value: n }, n));
+    if (names.includes(v)) ctl.ggEnz.value = v;
   };
   const buildPanel = () => {
     panel.innerHTML = ''; const f = (l, c, h) => panel.append(field(l, c, h));
@@ -316,12 +405,20 @@ function openCloningDialog() {
       const upd = () => { const sm = ctl.mode.value === 'sel'; ctl.enzBox.style.display = sm ? 'none' : 'block'; ctl.selInfo.style.display = sm ? 'block' : 'none'; const d = getDoc(ctl.vec), r = selRange(d); ctl.selInfo.textContent = r ? `Replaces ${r[0] + 1}..${r[1]} (${r[1] - r[0]} bp) of ${d.name}.` : `Inserts at the cursor (after base ${d.caret}) of ${d.name}.`; };
       ctl.mode.addEventListener('change', upd); ctl.vec.addEventListener('change', () => { fillEnz(); upd(); }); fillEnz(); upd();
     } else if (method === 'gg') {
-      ctl.vec = sel(docOpts, cur.id); f('Destination vector', ctl.vec);
-      ctl.ggEnz = sel([['BsaI', 'BsaI']]); f('Type IIS enzyme', ctl.ggEnz, 'Eligible enzymes only (cut downstream of the site, 5′ overhang). The vector needs exactly 2 sites.');
-      ctl.keep = sel([['auto', 'Automatic (keep the fragment without enzyme sites)'], ['A', 'Keep fragment A (between the sites, no origin crossing)'], ['B', 'Keep fragment B (spans the origin)']]); f('Backbone fragment', ctl.keep);
+      ctl.ggMode = sel([['pcr', 'PCR-amplified insert(s) (primers carry the enzyme site)'], ['plasmid', 'Digest & ligate existing plasmids (open tabs)']], 'pcr'); f('Insert source', ctl.ggMode);
+      ctl.enzPick = el('div', { class: 'enzgrid' }); f('Type IIS enzyme(s) – tick several to use them together', ctl.enzPick, 'Eligible enzymes only (cut downstream of the site, 5′ overhang).');
+      const pcr = el('div', {}), pl = el('div', {});
+      ctl.vec = sel(docOpts, cur.id); pcr.append(field('Destination vector', ctl.vec));
+      ctl.ggEnz = sel([['BsaI', 'BsaI']]); pcr.append(field('Enzyme whose site the primers carry', ctl.ggEnz, 'All ticked enzymes cut the vector (it needs exactly 2 sites in total); the PCR primers carry the site of this one.'));
+      ctl.keep = sel([['auto', 'Automatic (keep the fragment without enzyme sites)'], ['A', 'Keep fragment A (between the sites, no origin crossing)'], ['B', 'Keep fragment B (spans the origin)']]); pcr.append(field('Backbone fragment', ctl.keep));
       ctl.pad = txt('TTTT', '', 120); ctl.tm = num(60, 45, 72); ctl.internal = txt('', 'auto', 260);
-      panel.append(el('div', { class: 'two' }, field('5′ pad (helps the enzyme cut)', ctl.pad), field('Primer Tm target (°C)', ctl.tm)), field('Internal overhangs (comma-separated, blank = automatic)', ctl.internal, 'Only needed with 2+ inserts: one overhang per junction between inserts.'));
-      ctl.vec.addEventListener('change', fillGG); fillGG();
+      pcr.append(el('div', { class: 'two' }, field('5′ pad (helps the enzyme cut)', ctl.pad), field('Primer Tm target (°C)', ctl.tm)), field('Internal overhangs (comma-separated, blank = automatic)', ctl.internal, 'Only needed with 2+ inserts: one overhang per junction between inserts.'));
+      ctl.plSel = docs.map(d => ({ doc: d, cb: el('input', { type: 'checkbox', checked: (d === cur) || undefined, onchange: fillGG }) }));
+      pl.append(el('div', { class: 'small-note' }, 'Tick the plasmids to assemble. Each is cut with the ticked enzyme(s); fragments without remaining sites are ligated through matching overhangs (either orientation).'),
+        el('div', { class: 'enzpick' }, ctl.plSel.map(x => el('label', { class: 'chk', style: 'display:flex' }, x.cb, `${x.doc.name} (${x.doc.seq.length.toLocaleString('en-US')} bp${x.doc.circular ? '' : ', linear'})`))));
+      panel.append(pcr, pl);
+      const upd = () => { const isPl = ctl.ggMode.value === 'plasmid'; pcr.style.display = isPl ? 'none' : 'block'; pl.style.display = isPl ? 'block' : 'none'; partsWrap.style.display = isPl ? 'none' : 'block'; fillGG(); };
+      ctl.ggMode.addEventListener('change', upd); ctl.vec.addEventListener('change', fillGG); upd();
     } else {
       ctl.rxn = sel([['BP', 'BP reaction – PCR product (attB) + donor vector (attP)'], ['LR', 'LR reaction – entry clone (attL) + destination vector (attR)']], 'BP'); f('Reaction', ctl.rxn);
       const bp = el('div', {}), lr = el('div', {});
@@ -348,7 +445,10 @@ function openCloningDialog() {
     out.innerHTML = ''; design = null;
     try {
       const T = () => clamp(+ctl.tm.value || 60, 45, 72);
-      if (method === 'gateway' && ctl.rxn.value === 'LR') design = designGateway({ reaction: 'LR', entry: getDoc(ctl.entry), dest: getDoc(ctl.dest) });
+      if (method === 'gg' && ctl.ggMode.value === 'plasmid') {
+        if (!ggChecked.size) throw new Error('Tick at least one enzyme.');
+        design = designGGPlasmids({ docs: ctl.plSel.filter(x => x.cb.checked).map(x => x.doc), enzymes: [...ggChecked] });
+      } else if (method === 'gateway' && ctl.rxn.value === 'LR') design = designGateway({ reaction: 'LR', entry: getDoc(ctl.entry), dest: getDoc(ctl.dest) });
       else {
         const parts = specs().map(s => resolvePart(s, docs)), vec = getDoc(ctl.vec);
         if (method === 'homology') {
@@ -371,7 +471,8 @@ function openCloningDialog() {
           }
           design = designHomology({ vec, leftEnd, rightStart, parts, H, tm: T(), addL, addR, siteNote });
         } else if (method === 'gg') {
-          design = designGoldenGate({ vec, parts, enzyme: ctl.ggEnz.value, tm: T(), pad: ctl.pad.value, keep: ctl.keep.value, internal: ctl.internal.value.split(/[,\s]+/).filter(Boolean) });
+          if (!ggChecked.size) throw new Error('Tick at least one enzyme.');
+          design = designGoldenGate({ vec, parts, enzyme: ctl.ggEnz.value, enzymes: [...ggChecked], tm: T(), pad: ctl.pad.value, keep: ctl.keep.value, internal: ctl.internal.value.split(/[,\s]+/).filter(Boolean) });
         } else {
           design = designGateway({ reaction: 'BP', donor: vec, part: parts[0], extraF: cleanSeq(ctl.extraF.value).toUpperCase(), extraR: cleanSeq(ctl.extraR.value).toUpperCase(), tm: T() });
         }
@@ -389,18 +490,25 @@ function openCloningDialog() {
       const tbl = el('table', { class: 'ptable' }, el('tr', {}, ['Primer', "Sequence (5′→3′)", 'Length', 'Tm of binding part'].map(h => el('th', {}, h))));
       for (const p of d.primers) {
         const tail = p.seq.slice(0, p.seq.length - p.gs.length);
-        tbl.append(el('tr', {}, el('td', {}, el('b', {}, p.name)), el('td', { class: 'mono pseq' }, tail ? el('span', { class: 'tail' }, tail) : '', p.gs), el('td', {}, p.seq.length + ' nt'), el('td', {}, fmtTm(tmPrimer3(p.gs)))));
+        tbl.append(el('tr', {}, el('td', {}, el('b', {}, p.name)), el('td', { class: 'mono pseq' }, tail ? el('span', { class: 'tail' }, tail) : '', p.gs), el('td', {}, p.seq.length + ' nt'), el('td', {}, fmtTm(tmPrimer(p.gs)))));
       }
       out.append(el('div', { class: 'ptablewrap' }, tbl), el('div', { class: 'small-note' }, 'Coloured part = 5′ extension (homology / enzyme site / att site); black = gene-specific binding part. Tm: ' + tmConfText() + '.'));
     }
-    const csv = () => 'Name,Sequence,Length,Tm\n' + d.primers.map(p => `${p.name},${p.seq},${p.seq.length},${fmtTm(tmPrimer3(p.gs)).replace(' °C', '')}`).join('\n');
+    if (d.primers.length && tmConf().method === 'q5') {   // NEB rule for Q5: Ta = lower primer Tm + 1 °C (max 72 °C), calculated on the binding parts
+      const byPart = new Map(); for (const p of d.primers) { const k = p.part ?? 0; (byPart.get(k) || byPart.set(k, []).get(k)).push(tmPrimer(p.gs)); }
+      const ta = [...byPart.values()].filter(v => v.length === 2 && v.every(Number.isFinite)).map(v => Math.min(72, Math.min(...v) + 1).toFixed(1));
+      if (ta.length) out.append(el('div', { class: 'small-note' }, `Suggested Q5 annealing temperature (lower Tm + 1 °C, max 72 °C): ${ta.map((t, i) => (ta.length > 1 ? `PCR ${i + 1}: ` : '') + t + ' °C').join(' · ')}.`));
+    }
+    const csv = () => 'Name,Sequence,Length,Tm\n' + d.primers.map(p => `${p.name},${p.seq},${p.seq.length},${fmtTm(tmPrimer(p.gs)).replace(' °C', '')}`).join('\n');
     out.append(el('div', { class: 'btnrow' },
       el('button', { class: 'btn primary', onclick: () => { const doc = addDoc({ name: d.name, seq: d.seq, circular: d.circular, features: d.features, meta: { definition: `Designed with Plasmid Viewer – ${d.method}` } }); doc.dirty = true; toast(`Created “${doc.name}”`); if (modal) modal.close(); } }, 'Create plasmid in a new tab'),
       d.primers.length ? el('button', { class: 'btn', onclick: async () => { await copyToSystem(d.primers.map(p => `${p.name}\t${p.seq}`).join('\n')); toast('Primers copied'); } }, 'Copy primers') : null,
       d.primers.length ? el('button', { class: 'btn', onclick: () => downloadBlob(d.name + '_primers.csv', csv(), 'text/csv') }, 'Download primers (CSV)') : null));
   };
 
-  const tmLine = el('div', { class: 'small-note' }, 'Primer Tm: ' + tmConfText() + '  ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'change conditions'), ' (applies to the next design).');
+  const tmSel = el('select', { onchange: () => { store.set('tmConf', { ...store.get('tmConf', {}), method: tmSel.value }); tmTxt.textContent = tmConfText(); requestUpdate(true); } }, el('option', { value: 'primer3' }, 'primer3'), el('option', { value: 'q5' }, 'NEB Q5'));
+  tmSel.value = tmConf().method; const tmTxt = el('span', {}, tmConfText());
+  const tmLine = el('div', { class: 'small-note' }, 'Primer Tm method: ', tmSel, ' ', tmTxt, '  ', el('a', { href: '#', onclick: e => { e.preventDefault(); openTmDialog(); } }, 'more settings'), ' (applies to the next design).');
   const body = el('div', { class: 'cloning' }, tabs, panel, tmLine, partsWrap, el('div', { class: 'btnrow' }, el('button', { class: 'btn primary', onclick: run }, 'Design')), out);
   addPart(); setMethod('homology');
   modal = openModal('Cloning tools', body, [{ label: 'Close' }], { wide: true });

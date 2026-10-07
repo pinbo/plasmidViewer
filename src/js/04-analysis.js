@@ -162,7 +162,7 @@ function findAll(doc, query) {
   const U = seqU(doc), n = U.length, ext = doc.circular ? U + U.slice(0, q.length - 1) : U;
   const res = [], seen = new Set();
   const src = iupacRegexSrc(q), rcSrc = iupacRegexSrc(revcomp(q));
-  const run = (re, strand) => { for (const m of ext.matchAll(new RegExp('(?=(' + re + '))', 'g'))) if (m.index < n && !seen.has(m.index + ':' + strand)) { seen.add(m.index + ':' + strand); res.push({ s: m.index, e: Math.min(m.index + q.length, n), strand }); } };
+  const run = (re, strand) => { for (const m of ext.matchAll(new RegExp('(?=(' + re + '))', 'g'))) if (m.index < n && !seen.has(m.index + ':' + strand)) { seen.add(m.index + ':' + strand); res.push({ s: m.index, e: m.index + q.length, strand }); } };   // e > n: the match runs across the origin of a circular plasmid
   run(src, 1); if (revcomp(q) !== q) run(rcSrc, -1);
   return res.sort((a, b) => a.s - b.s);
 }
