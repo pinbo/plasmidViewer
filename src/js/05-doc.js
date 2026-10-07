@@ -5,11 +5,15 @@ const App = {
   docs: [], cur: null,
   settings: Object.assign({
     theme: 'auto', view: 'split', sideOpen: true, mapW: 0, sideW: 0, sideTab: 'features', enzMode: 'unique', enzShow: [],
-    showFeatures: true, showOrfs: false, orfMin: 100, showTrans: true, autoDetect: true, detectThr: 0.96, linZoom: 1,
+    showFeatures: true, showOrfs: false, orfMin: 100, showTrans: true, autoDetect: true, detectThr: 0.96, linZoom: 1, mapFeatFont: 12, mapNameFont: 16, mapEnzFont: 10,
   }, store.get('settings', {})),
   clip: null,
   editing: false,   // sequence editing is locked until the user switches it on (guards against accidental typing)
 };
+{ const S = App.settings, v = S.mapFontsV || 0;   // newer default map font sizes replace the ones saved by earlier versions (once)
+  if (v < 2) { S.mapFeatFont = 12; S.mapNameFont = 16; }
+  if (v < 3) S.mapEnzFont = 10;
+  S.mapFontsV = 3; }
 let _lockToast = 0;
 function lockedToast() {
   if (Date.now() - _lockToast > 1500) toast('Sequence editing is disabled – click the 🔒 button in the toolbar to allow it', 3200);

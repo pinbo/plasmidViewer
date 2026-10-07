@@ -126,10 +126,10 @@ svg.map.lin { width: auto; height: auto; }
 .mp-feat:hover { filter: brightness(1.08); }
 .mp-feat.on { stroke: var(--text); stroke-width: 2.2; }
 .mp-feat.orf { opacity: .55; }
-.mp-lbl { fill: var(--text); font-size: 16px; font-weight: 700; cursor: pointer; }
-.mp-lbl.enz { fill: var(--enz); font-weight: 600; font-size: 12px; }
+.mp-lbl { fill: var(--text); font-size: var(--mp-feat, 12px); font-weight: 700; cursor: pointer; }
+.mp-lbl.enz { fill: var(--enz); font-weight: 600; font-size: var(--mp-enz, 10px); }
 .mp-lbl:hover { text-decoration: underline; }
-.mp-flbl { font-size: 15px; font-weight: 600; pointer-events: none; }
+.mp-flbl { font-size: calc(var(--mp-feat, 12px) * 0.94); font-weight: 600; pointer-events: none; }
 .mp-hang { fill: none; stroke-width: 2; stroke-linejoin: round; cursor: pointer; }
 .mp-hang.hov, .mp-hang.on { stroke: #e5322d; }
 .mp-lead { fill: none; stroke: var(--muted); stroke-width: .8; opacity: .55; pointer-events: none; }
@@ -138,10 +138,10 @@ svg.map.lin { width: auto; height: auto; }
 .mp-cut.hov, .mp-cut.on { stroke: #e5322d; stroke-width: 1.8; opacity: 1; }
 .mp-sel { fill: var(--sel); }
 .mp-caret { stroke: var(--caret); stroke-width: 1.5; }
-.mp-title { fill: var(--text); font-size: 24px; font-weight: 700; }
-.mp-title.lin { font-size: 14px; }
-.mp-sub { fill: var(--muted); font-size: 17px; }
-.mp-sub.small { font-size: 13px; font-weight: 400; }
+.mp-title { fill: var(--text); font-size: var(--mp-name, 16px); font-weight: 700; }
+.mp-title.lin { font-size: calc(var(--mp-name, 16px) * 0.58); }
+.mp-sub { fill: var(--muted); font-size: calc(var(--mp-name, 16px) * 0.71); }
+.mp-sub.small { font-size: calc(var(--mp-name, 16px) * 0.54); font-weight: 400; }
 
 /* sequence view */
 #seqScroll { position: relative; flex: 1; min-height: 0; overflow: auto; outline: none; padding: 8px 12px 40px 8px; user-select: none; }

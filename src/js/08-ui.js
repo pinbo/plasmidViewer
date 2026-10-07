@@ -422,6 +422,19 @@ function liveWarn(ta) {
   ta.addEventListener('input', upd); upd(); return line;
 }
 
+/* font sizes of the map (feature names, plasmid name) */
+function openMapFontDialog() {
+  const F = mapFonts(), num = (v) => el('input', { type: 'number', min: 2, max: 60, step: 1, value: v, style: 'width:80px' });
+  const feat = num(F.feat), enz = num(F.enz), name = num(F.name);
+  const apply = () => { const S = App.settings; S.mapFeatFont = clamp(+feat.value || 12, 2, 60); S.mapEnzFont = clamp(+enz.value || 10, 2, 60); S.mapNameFont = clamp(+name.value || 16, 2, 60); saveSettings(); requestUpdate(true); };
+  for (const i of [feat, enz, name]) i.addEventListener('input', apply);
+  openModal('Map font sizes', el('div', { class: 'form' },
+    el('div', { class: 'two' }, field('Feature names (px)', feat, 'default 12'), field('Enzyme names (px)', enz, 'default 10')),
+    el('div', { class: 'two' }, field('Plasmid name (px)', name, 'default 16'), el('div', {})),
+    el('div', { class: 'small-note' }, 'Range 2–60. Applies to the circular and linear maps and to exported map images. The preview updates as you type.')),
+    [{ label: 'Defaults', action: () => { const S = App.settings; S.mapFeatFont = 12; S.mapEnzFont = 10; S.mapNameFont = 16; saveSettings(); requestUpdate(true); } }, { label: 'Close', primary: true }]);
+}
+
 /* Tm conditions (primer3 parameters) */
 function openTmDialog() {
   const c = tmConf(), num = (v, step) => el('input', { type: 'number', min: 0, step, value: v });
@@ -620,6 +633,7 @@ const actions = {
     const r = e.target.closest('button').getBoundingClientRect(), S = App.settings;
     const tog = (k, label) => ({ label, checked: S[k], action: () => { S[k] = !S[k]; saveSettings(); requestUpdate(true); } });
     showMenu(r.left, r.bottom + 4, [tog('showFeatures', 'Features'), tog('showOrfs', 'Open reading frames'), tog('showTrans', 'Amino acids in CDS bars'), '-',
+      { label: 'Map font sizes…', action: openMapFontDialog }, '-',
       { label: 'Zoom linear map in', action: () => { S.linZoom = Math.min(S.linZoom * 1.5, 12); saveSettings(); requestUpdate(false); } },
       { label: 'Zoom linear map out', action: () => { S.linZoom = Math.max(S.linZoom / 1.5, 1); saveSettings(); requestUpdate(false); } }]);
   },

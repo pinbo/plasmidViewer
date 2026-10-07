@@ -62,7 +62,12 @@ function splitRingLabels(L) {
   return { right, left: left.reverse() };   // both lists run from top to bottom
 }
 
+/* map font sizes (Display ▸ Map font sizes…): feature names and plasmid name; everything else in the map scales from them */
+const mapFonts = () => { const S = App.settings; return { feat: clamp(+S.mapFeatFont || 12, 2, 60), name: clamp(+S.mapNameFont || 16, 2, 60), enz: clamp(+S.mapEnzFont || 10, 2, 60) }; };
+const mapFontStyle = F => `--mp-feat:${F.feat}px;--mp-name:${F.name}px;--mp-enz:${F.enz}px`;
+
 function renderCircular(doc, host) {
+  const F = mapFonts();
   const n = doc.seq.length, feats = visibleFeatures(doc);
   const BH = 16.5, LH = 19.5;
   const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), n * 0.002);
@@ -70,8 +75,8 @@ function renderCircular(doc, host) {
   // ring size follows the number of names: few features / enzymes → a large ring that uses the room, many → a smaller ring (and the widest name decides how much width the ring may take)
   const egroups = groupEnzymes(enzymeView(doc)), nLabels = feats.length + egroups.length;
   let maxW = 60;
-  for (const f of feats) maxW = Math.max(maxW, textWidth(f.name, '700 16px system-ui, sans-serif'));
-  for (const g of egroups) maxW = Math.max(maxW, textWidth(`${g.names.join(', ')} (${g.top})`, '600 12px system-ui, sans-serif'));
+  for (const f of feats) maxW = Math.max(maxW, textWidth(f.name, `700 ${F.feat}px system-ui, sans-serif`));
+  for (const g of egroups) maxW = Math.max(maxW, textWidth(`${g.names.join(', ')} (${g.top})`, `600 ${F.enz}px system-ui, sans-serif`));
   const RMax = Math.min(250, 480 - maxW - 36 - laneSpan), RMin = Math.min(125, RMax);
   const R = Math.max(100, RMin + (RMax - RMin) * (1 - clamp((nLabels - 8) / 52, 0, 1))), rTop = R + laneSpan;
   const ang = p => 2 * Math.PI * p / n;
@@ -123,7 +128,7 @@ function renderCircular(doc, host) {
   const cols = splitRingLabels(labels);
   const segMin = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, -((ax - CCX) * dx + (ay - CCY) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(ax + t * dx - CCX, ay + t * dy - CCY); };
   for (const [s, list] of [[1, cols.right], [-1, cols.left]]) {
-    const ys = placeStack(list.map(l => CCY - Rl * Math.cos(l.theta)), list.map(l => (l.kind === 'e' ? 14 : 18)), minY, maxY);
+    const ys = placeStack(list.map(l => CCY - Rl * Math.cos(l.theta)), list.map(l => (l.kind === 'e' ? 1.17 * F.enz : 1.125 * F.feat)), minY, maxY);
     list.forEach((l, i) => {
       const y = ys[i], dy = y - CCY, x = CCX + s * (Math.sqrt(Math.max(Rl * Rl - dy * dy, (0.35 * Rl) ** 2)) + 10);
       const [ax, ay] = polar(l.rr, l.theta), lx = x - s * 3;
@@ -131,7 +136,7 @@ function renderCircular(doc, host) {
       // towards the ring, leave the shape radially first
       let pts = `${f2(ax)},${f2(ay)} ${f2(lx)},${f2(y)}`;
       if (segMin(ax, ay, lx, y) < l.rr - 0.5) { const [ex, ey] = polar(Math.max(Re, l.rr), l.theta); pts = `${f2(ax)},${f2(ay)} ${f2(ex)},${f2(ey)} ${f2(lx)},${f2(y)}`; }
-      const lw = textWidth(l.kind === 'e' ? `${l.g.names.join(', ')} (${l.g.top})` : l.text, l.kind === 'e' ? '600 12px system-ui, sans-serif' : '700 16px system-ui, sans-serif') + 6;
+      const lw = textWidth(l.kind === 'e' ? `${l.g.names.join(', ')} (${l.g.top})` : l.text, l.kind === 'e' ? `600 ${F.enz}px system-ui, sans-serif` : `700 ${F.feat}px system-ui, sans-serif`) + 6;
       bx0 = Math.min(bx0, s === 1 ? x : x - lw); bx1 = Math.max(bx1, s === 1 ? x + lw : x); by0 = Math.min(by0, y - 10); by1 = Math.max(by1, y + 10);
       const tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
       if (l.kind === 'e') {
@@ -151,11 +156,11 @@ function renderCircular(doc, host) {
   }
   // centre text
   const nm = doc.name.length > 26 ? doc.name.slice(0, 25) + '…' : doc.name;
-  out.push(`<text class="mp-title" x="${CCX}" y="${CCY - 16}" text-anchor="middle">${esc(nm)}</text>`);
-  out.push(`<text class="mp-sub" x="${CCX}" y="${CCY + 12}" text-anchor="middle">${n.toLocaleString('en-US')} bp</text>`);
-  if (segs.length) out.push(`<text class="mp-sub small" x="${CCX}" y="${CCY + 36}" text-anchor="middle">${segLabel(segs)} · ${segs.reduce((t, s) => t + s[1] - s[0], 0).toLocaleString('en-US')} bp selected</text>`);
+  out.push(`<text class="mp-title" x="${CCX}" y="${CCY - 0.667 * F.name}" text-anchor="middle">${esc(nm)}</text>`);
+  out.push(`<text class="mp-sub" x="${CCX}" y="${CCY + 0.5 * F.name}" text-anchor="middle">${n.toLocaleString('en-US')} bp</text>`);
+  if (segs.length) out.push(`<text class="mp-sub small" x="${CCX}" y="${CCY + 1.5 * F.name}" text-anchor="middle">${segLabel(segs)} · ${segs.reduce((t, s) => t + s[1] - s[0], 0).toLocaleString('en-US')} bp selected</text>`);
   const pad = 14;
-  host.innerHTML = `<svg class="map circ" viewBox="${f2(bx0 - pad)} ${f2(by0 - pad)} ${f2(bx1 - bx0 + 2 * pad)} ${f2(by1 - by0 + 2 * pad)}" data-n="${n}" data-r="${f2(R)}" preserveAspectRatio="xMidYMid meet">${out.join('')}</svg>`;
+  host.innerHTML = `<svg class="map circ" style="${mapFontStyle(F)}" viewBox="${f2(bx0 - pad)} ${f2(by0 - pad)} ${f2(bx1 - bx0 + 2 * pad)} ${f2(by1 - by0 + 2 * pad)}" data-n="${n}" data-r="${f2(R)}" preserveAspectRatio="xMidYMid meet">${out.join('')}</svg>`;
 }
 
 /* converts a mouse event on the circular map to a sequence position + whether it is on the ring area */
@@ -170,11 +175,12 @@ function circularPos(svg, e, n) {
 /* ---------------- linear map ---------------- */
 const LIN_M = 40;
 function renderLinear(doc, host) {
+  const F = mapFonts();
   const n = doc.seq.length, feats = visibleFeatures(doc);
   const wrap = host.clientWidth || 900, zoom = App.settings.linZoom;
   const W = Math.max(500, Math.round((wrap - 2) * zoom));
   const X = p => LIN_M + p / n * (W - 2 * LIN_M);
-  const font = '12px system-ui, sans-serif';
+  const font = `600 ${F.enz}px system-ui, sans-serif`;
   const out = [];
   const sel = selRange(doc);
 
@@ -187,12 +193,12 @@ function renderLinear(doc, host) {
     let k = 0; while (k < rowEnd.length && rowEnd[k] > e.x - 2) k++;
     rowEnd[k] = e.x + e.w; e.row = k;
   }
-  const enzRows = rowEnd.length, EH = 15;
+  const enzRows = rowEnd.length, EH = Math.max(8, Math.round(1.25 * F.enz));
   const baseY = 30 + enzRows * EH + 14;
 
   // features lanes
   const items = feats.map(f => {
-    const nameW = textWidth(f.name, '700 16px system-ui, sans-serif') + 8;
+    const nameW = textWidth(f.name, `700 ${F.feat}px system-ui, sans-serif`) + 8;
     const [a, b] = featBounds(f); const bw = (X(b) - X(a));
     const inside = nameW <= bw - 14;
     const ivs = f.locs.concat(hangSegs(f, n)).map(([s, e]) => [X(s), X(e)]);
@@ -243,7 +249,7 @@ function renderLinear(doc, host) {
   }
   if (!sel) out.push(`<line class="mp-caret" x1="${f2(X(doc.caret))}" y1="${enzRows * EH + 12}" x2="${f2(X(doc.caret))}" y2="${H - 8}"/>`);
   out.push(`<text class="mp-title lin" x="${LIN_M}" y="16">${esc(doc.name)} <tspan class="mp-sub small">· ${n.toLocaleString('en-US')} bp · linear</tspan></text>`);
-  host.innerHTML = `<svg class="map lin" width="${W}" height="${H}" data-n="${n}" data-w="${W}">${out.join('')}</svg>`;
+  host.innerHTML = `<svg class="map lin" style="${mapFontStyle(F)}" width="${W}" height="${H}" data-n="${n}" data-w="${W}">${out.join('')}</svg>`;
 }
 function linearPos(svg, e, n) {
   const r = svg.getBoundingClientRect(), W = +svg.dataset.w;
@@ -264,19 +270,19 @@ svg { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
 .mp-ticklbl { fill: #6a7686; font-size: 11px; }
 .mp-feat { stroke: rgba(0,0,0,.28); stroke-width: .8; }
 .mp-feat.orf { opacity: .55; }
-.mp-lbl { fill: #1d2530; font-size: 16px; font-weight: 700; }
-.mp-lbl.enz { fill: #1c55c7; font-weight: 600; font-size: 12px; }
-.mp-flbl { font-size: 15px; font-weight: 600; }
+.mp-lbl { fill: #1d2530; font-size: var(--mp-feat, 12px); font-weight: 700; }
+.mp-lbl.enz { fill: #1c55c7; font-weight: 600; font-size: var(--mp-enz, 10px); }
+.mp-flbl { font-size: calc(var(--mp-feat, 12px) * 0.94); font-weight: 600; }
 .mp-hang { fill: none; stroke-width: 2; stroke-linejoin: round; cursor: pointer; }
 .mp-hang.hov, .mp-hang.on { stroke: #e5322d; }
 .mp-lead { fill: none; stroke: #6a7686; stroke-width: .8; opacity: .55; pointer-events: none; }
 .mp-lead.on, .mp-lead.hov { stroke: #e5322d; stroke-width: 1.4; opacity: 1; }
 .mp-cut { stroke: #1c55c7; stroke-width: 1; opacity: .45; pointer-events: none; }
 .mp-cut.hov, .mp-cut.on { stroke: #e5322d; stroke-width: 1.8; opacity: 1; }
-.mp-title { fill: #1d2530; font-size: 24px; font-weight: 700; }
-.mp-title.lin { font-size: 14px; }
-.mp-sub { fill: #6a7686; font-size: 17px; }
-.mp-sub.small { font-size: 13px; font-weight: 400; }
+.mp-title { fill: #1d2530; font-size: var(--mp-name, 16px); font-weight: 700; }
+.mp-title.lin { font-size: calc(var(--mp-name, 16px) * 0.58); }
+.mp-sub { fill: #6a7686; font-size: calc(var(--mp-name, 16px) * 0.71); }
+.mp-sub.small { font-size: calc(var(--mp-name, 16px) * 0.54); font-weight: 400; }
 `;
 
 /* Renders the current plasmid's map offscreen (always the full map, without selection/cursor) and returns {svg, width, height} */
