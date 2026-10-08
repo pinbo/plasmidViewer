@@ -5,7 +5,7 @@ const App = {
   docs: [], cur: null,
   settings: Object.assign({
     theme: 'auto', view: 'split', sideOpen: true, mapW: 0, sideW: 0, sideTab: 'features', enzMode: 'unique', enzShow: [],
-    showFeatures: true, showOrfs: false, orfMin: 100, showTrans: true, autoDetect: true, detectThr: 0.96, linZoom: 1, mapFeatFont: 12, mapNameFont: 16, mapEnzFont: 10,
+    showFeatures: true, showOrfs: false, orfMin: 100, showTrans: true, autoDetect: true, detectThr: 0.96, linZoom: 1, mapFeatFont: 12, mapNameFont: 16, mapEnzFont: 10, mapShapeW: 16.5,
   }, store.get('settings', {})),
   clip: null,
   editing: false,   // sequence editing is locked until the user switches it on (guards against accidental typing)

@@ -64,12 +64,13 @@ function splitRingLabels(L) {
 
 /* map font sizes (Display ▸ Map font sizes…): feature names and plasmid name; everything else in the map scales from them */
 const mapFonts = () => { const S = App.settings; return { feat: clamp(+S.mapFeatFont || 12, 2, 60), name: clamp(+S.mapNameFont || 16, 2, 60), enz: clamp(+S.mapEnzFont || 10, 2, 60) }; };
+const mapShapeW = () => clamp(+App.settings.mapShapeW || 16.5, 2, 60);   // thickness of the feature shapes
 const mapFontStyle = F => `--mp-feat:${F.feat}px;--mp-name:${F.name}px;--mp-enz:${F.enz}px`;
 
 function renderCircular(doc, host) {
   const F = mapFonts();
   const n = doc.seq.length, feats = visibleFeatures(doc);
-  const BH = 16.5, LH = 19.5;
+  const BH = mapShapeW(), LH = BH + 3;
   const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), n * 0.002);
   const lanes = Math.max(1, count), laneSpan = (lanes - 1) * LH + BH / 2 + 4;
   // ring size follows the number of names: few features / enzymes → a large ring that uses the room, many → a smaller ring (and the widest name decides how much width the ring may take)
@@ -228,7 +229,7 @@ function renderLinear(doc, host) {
   });
   const { lane, count } = assignLanes(items.map(i => ({ id: i.id, ivs: i.ivs })), 3);
   const info = new Map(items.map(i => [i.id, i]));
-  const FH = 16.5, LH = 22.5, featY0 = baseY + 46;
+  const FH = mapShapeW(), LH = FH + 6, featY0 = baseY + 46;
   const H = featY0 + Math.max(1, count) * LH + 24;
 
   if (sel) out.push(`<rect class="mp-sel" x="${f2(X(sel[0]))}" y="${enzRows * EH + 10}" width="${f2(Math.max(1.5, X(sel[1]) - X(sel[0])))}" height="${H - enzRows * EH - 14}"/>`);
