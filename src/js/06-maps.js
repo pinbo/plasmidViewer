@@ -29,7 +29,7 @@ function groupEnzymes(list) {
   for (const e of list) { const k = e.top; if (!g.has(k)) g.set(k, { top: e.top, items: [] }); g.get(k).items.push(e); }
   return [...g.values()].map(x => { x.items.sort((p, q) => p.name.localeCompare(q.name)); x.names = x.items.map(i => i.name); return x; });
 }
-const enzGroupSvg = (g, attrs = '') => `<text ${attrs}>${g.items.map((e, i) => `<tspan data-enz="${esc(e.name)}" data-s="${e.s}" data-e="${e.e}">${esc(e.name)}${i < g.items.length - 1 ? ', ' : ` (${g.top})`}</tspan>`).join('')}</text>`;   // separators and the position belong to a name's tspan so the whole label is hoverable
+const enzGroupSvg = (g, attrs = '', posFirst = false) => `<text ${attrs}>${g.items.map((e, i) => `<tspan data-enz="${esc(e.name)}" data-s="${e.s}" data-e="${e.e}">${posFirst && !i ? `(${g.top}) ` : ''}${esc(e.name)}${i < g.items.length - 1 ? ', ' : posFirst ? '' : ` (${g.top})`}</tspan>`).join('')}</text>`;   // separators and the position belong to a name's tspan so the whole label is hoverable
 
 /* Least-squares placement of labels along a vertical axis: keeps the order, keeps each label as near as possible to its wish (d) with room for the
    labels' heights h between neighbours (pool-adjacent-violators on d_i - offset_i), then fits the whole stack into [lo, hi]. */
@@ -123,7 +123,7 @@ function renderCircular(doc, host) {
   }
   // label layout: names stay around the ring in two columns that follow the circle (right / left of the vertical axis); each column is filled
   // evenly, every name as near to its position as the stacking allows, and the order matches the order around the ring so leaders do not cross
-  const Rl = rTop + 22, Re = rTop + 8, minY = 22, maxY = CH - 22, under = [], text = [];
+  const Re = rTop + 8, under = [], text = [];
   let bx0 = CCX - rTop - 12, bx1 = CCX + rTop + 12, by0 = CCY - rTop - 12, by1 = CCY + rTop + 12;   // bounds of everything drawn, so the view can be fitted tightly
   labels.sort((p, q) => p.theta - q.theta);
   const segMin = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, -((ax - CCX) * dx + (ay - CCY) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(ax + t * dx - CCX, ay + t * dy - CCY); };
@@ -141,34 +141,24 @@ function renderCircular(doc, host) {
     const tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
     if (l.kind === 'e') {
       under.push(`<polyline class="mp-lead${l.g.items.some(isSel) ? ' on' : ''}" data-enz="${esc(l.g.names.join('|'))}" points="${pts}"/>`);
-      text.push(enzGroupSvg(l.g, `class="mp-lbl enz" ${tattr}`));
+      text.push(enzGroupSvg(l.g, `class="mp-lbl enz" ${tattr}`, s === -1));
     } else {
       under.push(`<polyline class="mp-lead${doc.selFid === l.f.id ? ' on' : ''}" data-fid="${l.f.id}" points="${pts}"/>`);
       text.push(`<text class="mp-lbl" data-fid="${l.f.id}" ${tattr}>${esc(l.text)}</text>`);
     }
   };
-  // names close to the vertical axis (right above / below the ring) sit in rows above / below the ring, starting at their own position
-  const A = 25 * Math.PI / 180, zTop = [], zBot = [], side = [];
-  for (const l of labels) (l.theta <= A || l.theta >= 2 * Math.PI - A ? zTop : Math.abs(l.theta - Math.PI) <= A ? zBot : side).push(l);
-  const cols = splitRingLabels(side);
-  let sideMin = CCY - Rl, sideMax = CCY + Rl;
+  // all names stand in two columns (SnapGene style): each column keeps the order around the ring and follows a circle that is larger than the ring, reaching
+  // a little above and below it so names near the vertical axis do not need rows of their own; the name ring grows until the fuller column fits all its
+  // names at full line height (the whole picture is fitted to the view afterwards, so a big name ring means a smaller map on screen)
+  const cols = splitRingLabels(labels), EXT = 0.2;
+  const colH = Math.max(0, ...[cols.right, cols.left].map(c => c.reduce((t, l) => t + labH(l), 0)));
+  const Rl = Math.max(rTop + 22, (colH + 8) / (2 * (1 + EXT))), minY = CCY - Rl * (1 + EXT), maxY = CCY + Rl * (1 + EXT);
   for (const [s, list] of [[1, cols.right], [-1, cols.left]]) {
     const ys = placeStack(list.map(l => CCY - Rl * Math.cos(l.theta)), list.map(labH), minY, maxY);
     list.forEach((l, i) => {
-      const y = ys[i], dy = y - CCY; sideMin = Math.min(sideMin, y); sideMax = Math.max(sideMax, y);
-      emit(l, s, CCX + s * (Math.sqrt(Math.max(Rl * Rl - dy * dy, (0.35 * Rl) ** 2)) + 10), y);
+      const y = ys[i], dy = y - CCY;
+      emit(l, s, CCX + s * (Math.max(Math.sqrt(Math.max(Rl * Rl - dy * dy, 0)), Re * Math.abs(Math.sin(l.theta))) + 8), y);   // never further out than the circle needs: names above / below the ring start right next to their site
     });
-  }
-  const rowH = Math.max(1.17 * F.enz, 1.125 * F.feat);
-  for (const [list, dir] of [[zTop, -1], [zBot, 1]]) {
-    const rows = [], base = dir < 0 ? Math.min(CCY - Rl - 6, sideMin - rowH) : Math.max(CCY + Rl + 6, sideMax + rowH);
-    for (const l of list) {
-      const s = Math.sin(l.theta) >= 0 ? 1 : -1, x0 = CCX + Re * Math.sin(l.theta) + s * 5, w = textWidth(labText(l), labFont(l)) + 10;
-      const lo = s === 1 ? x0 : x0 - w, hi = s === 1 ? x0 + w : x0;
-      let k = 0; while ((rows[k] || []).some(([a, b]) => lo < b && hi > a)) k++;
-      (rows[k] = rows[k] || []).push([lo, hi]);
-      emit(l, s, x0, base + dir * k * rowH);
-    }
   }
   out.splice(underAt, 0, ...under); out.push(...text);
   // caret
