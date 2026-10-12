@@ -12,7 +12,7 @@ function arcSeg(r1, r2, a1, a2, head, headPx) {
   if (!head) {
     return `M${P(r2, a1)} A${r2} ${r2} 0 ${large(a1, a2)} 1 ${P(r2, a2)} L${P(r1, a2)} A${r1} ${r1} 0 ${large(a1, a2)} 0 ${P(r1, a1)}Z`;
   }
-  let da = Math.min(headPx / rm, a2 - a1);
+  let da = Math.min(headPx / rm, (a2 - a1) / 2);   // short shapes: the head takes half of the length
   if (head === 1) {
     const ab = a2 - da, flare = 3;
     if (ab <= a1 + 1e-6) return `M${P(r2 + flare, a1)} L${P(rm, a2)} L${P(r1 - flare, a1)}Z`;
@@ -242,7 +242,7 @@ function renderLinear(doc, host) {
     const k = lane.get(f.id), y = featY0 + k * LH, it = info.get(f.id);
     const headSeg = f.strand === -1 ? 0 : f.locs.length - 1;
     f.locs.forEach(([a, b], i) => {
-      const x1 = X(a), x2 = X(b), h = FH, hl = Math.min(11, x2 - x1);
+      const x1 = X(a), x2 = X(b), h = FH, hl = Math.min(11, (x2 - x1) / 2);   // short shapes: the head takes half of the length
       const head = f.strand === 0 || i !== headSeg ? 0 : f.strand;
       let d;
       if (head === 1) d = `M${f2(x1)} ${y} H${f2(x2 - hl)} L${f2(x2)} ${y + h / 2} L${f2(x2 - hl)} ${y + h} H${f2(x1)}Z`;
