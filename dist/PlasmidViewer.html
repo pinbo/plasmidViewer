@@ -2345,7 +2345,8 @@ function buildMapSVG(doc) {
     else { w = +svg.getAttribute('width'); h = +svg.getAttribute('height'); svg.setAttribute('viewBox', `0 0 ${w} ${h}`); }
     svg.removeAttribute('class'); svg.removeAttribute('preserveAspectRatio');
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.insertAdjacentHTML('afterbegin', `<style>${EXPORT_CSS}</style><rect width="100%" height="100%" fill="#ffffff"/>`);
+    const [vx, vy, vw, vh] = svg.getAttribute('viewBox').split(' ');   // the circular viewBox does not start at 0,0, so the background must cover exactly the viewBox
+    svg.insertAdjacentHTML('afterbegin', `<style>${EXPORT_CSS}</style><rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="#ffffff"/>`);
     return { svg: new XMLSerializer().serializeToString(svg), width: w, height: h };
   } finally { tmp.remove(); }
 }
