@@ -651,7 +651,7 @@ function wireMap() {
     const enz = e.target.closest('[data-enz]');
     if (enz) { setSel(doc, +enz.dataset.s % n, Math.min(+enz.dataset.e, n)); return; }
     const fe = e.target.closest('[data-fid]');
-    if (fe) { const f = doc.features.find(x => x.id === +fe.dataset.fid) || findORFs(doc, App.settings.orfMin).find(x => x.id === fe.dataset.fid); if (f) selectFeature(doc, f); return; }
+    if (fe) { const f = doc.features.find(x => x.id === +fe.dataset.fid) || findORFs(doc, App.settings.orfMin).find(x => x.id === fe.dataset.fid); if (f) { selectFeature(doc, f); if (e.detail === 2 && doc.features.includes(f)) openFeatureDialog(doc, f); } return; }   // double click edits; detected on the press because selecting redraws the map and a redrawn shape / name never receives the dblclick event
     let pos;
     if (circ) { const c = circularPos(svg, e, n); const rr = +svg.dataset.r || 160; if (c.r < rr * 0.7 || c.r > rr * 2.6) { return; } pos = c.pos; } else pos = linearPos(svg, e, n);
     drag = { start: pos, last: pos, cross: 0 }; setSel(doc, pos, pos, null, false);
@@ -665,7 +665,6 @@ function wireMap() {
     setSel(doc, drag.start, pos, null, false, doc.circular && drag.cross !== 0);
   });
   window.addEventListener('mouseup', () => { drag = null; });
-  pane.addEventListener('dblclick', e => { const fe = e.target.closest('[data-fid]'), doc = App.cur; if (fe && doc) { const f = doc.features.find(x => x.id === +fe.dataset.fid); if (f) openFeatureDialog(doc, f); } });
   pane.addEventListener('contextmenu', contextMenu);
 }
 
