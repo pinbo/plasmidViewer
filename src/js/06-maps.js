@@ -65,11 +65,12 @@ function splitRingLabels(L) {
 /* map font sizes (Display ▸ Map font sizes…): feature names and plasmid name; everything else in the map scales from them */
 const mapFonts = () => { const S = App.settings; return { feat: clamp(+S.mapFeatFont || 12, 2, 60), name: clamp(+S.mapNameFont || 16, 2, 60), enz: clamp(+S.mapEnzFont || 10, 2, 60) }; };
 const mapShapeW = () => clamp(+App.settings.mapShapeW || 16.5, 2, 60);   // thickness of the feature shapes
+const isDark = hex => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return false; const n = parseInt(m[1], 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 105; };   // too dark for the black name to be read on it
 /* feature name with an optional round-corner box in the feature's colour (Display ▸ Colour feature names); anchor: x is where the name starts (s = 1) or ends (s = -1) */
 function featNameSvg(f, F, x, y, s, doc) {
   const box = App.settings.mapNameBox, tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
   const w = textWidth(f.name, `700 ${F.feat}px system-ui, sans-serif`) + 10, h = F.feat * 1.3;
-  const rect = box ? `<rect class="mp-lbx${doc.selFid === f.id ? ' on' : ''}" data-fid="${f.id}" x="${f2(s === 1 ? x - 5 : x - w + 5)}" y="${f2(y - h / 2)}" width="${f2(w)}" height="${f2(h)}" rx="${f2(h * 0.3)}" fill="${f.color}"/>` : '';
+  const rect = box ? `<rect class="mp-lbx${doc.selFid === f.id ? ' on' : ''}" data-fid="${f.id}" x="${f2(s === 1 ? x - 5 : x - w + 5)}" y="${f2(y - h / 2)}" width="${f2(w)}" height="${f2(h)}" rx="${f2(h * 0.3)}" fill="${isDark(f.color) ? '#d9dce1' : f.color}" fill-opacity=".7"/>` : '';
   return `${rect}<text class="mp-lbl${box ? ' boxed' : ''}" data-fid="${f.id}" ${tattr}>${esc(f.name)}</text>`;
 }
 const mapFontStyle = F => `--mp-feat:${F.feat}px;--mp-name:${F.name}px;--mp-enz:${F.enz}px`;
