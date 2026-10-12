@@ -632,7 +632,7 @@ const actions = {
   display: e => {
     const r = e.target.closest('button').getBoundingClientRect(), S = App.settings;
     const tog = (k, label) => ({ label, checked: S[k], action: () => { S[k] = !S[k]; saveSettings(); requestUpdate(true); } });
-    showMenu(r.left, r.bottom + 4, [tog('showFeatures', 'Features'), tog('showOrfs', 'Open reading frames'), tog('showTrans', 'Amino acids in CDS bars'), '-',
+    showMenu(r.left, r.bottom + 4, [tog('showFeatures', 'Features'), tog('showOrfs', 'Open reading frames'), tog('showTrans', 'Amino acids in CDS bars'), tog('mapOverlap', 'Overlap feature shapes on circular map'), '-',
       { label: 'Map sizes (fonts, shape width)…', action: openMapFontDialog }, '-',
       { label: 'Zoom linear map in', action: () => { S.linZoom = Math.min(S.linZoom * 1.5, 12); saveSettings(); requestUpdate(false); } },
       { label: 'Zoom linear map out', action: () => { S.linZoom = Math.max(S.linZoom / 1.5, 1); saveSettings(); requestUpdate(false); } }]);

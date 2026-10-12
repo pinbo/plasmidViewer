@@ -71,7 +71,8 @@ function renderCircular(doc, host) {
   const F = mapFonts();
   const n = doc.seq.length, feats = visibleFeatures(doc);
   const BH = mapShapeW(), LH = BH + 3;
-  const { lane, count } = assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), 0);   // no extra gap: features that are merely adjacent share a lane
+  const { lane, count } = App.settings.mapOverlap ? { lane: new Map(feats.map(f => [f.id, 0])), count: 1 }   // option: every shape on the ring, overlapping ones drawn over each other
+    : assignLanes(feats.map(f => ({ id: f.id, ivs: f.locs.concat(hangSegs(f, n)) })), 0);   // no extra gap: features that are merely adjacent share a lane
   const lanes = Math.max(1, count), laneSpan = (lanes - 1) * LH + BH / 2 + 4;
   // ring size follows the number of names: few features / enzymes → a large ring that uses the room, many → a smaller ring (and the widest name decides how much width the ring may take)
   const egroups = groupEnzymes(enzymeView(doc)), nLabels = feats.length + egroups.length;
