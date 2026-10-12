@@ -137,6 +137,10 @@ svg.map.lin { width: auto; height: auto; }
 .mp-lbl { fill: var(--text); font-size: var(--mp-feat, 12px); font-weight: 700; cursor: pointer; }
 .mp-lbl.enz { fill: var(--enz); font-weight: 600; font-size: var(--mp-enz, 10px); }
 .mp-lbl:hover { text-decoration: underline; }
+.mp-lbx { stroke: rgba(0,0,0,.28); stroke-width: .8; cursor: pointer; }
+.mp-lbx.on { stroke: var(--text); stroke-width: 2; }
+.mp-lbx.hov { stroke: #e5322d; stroke-width: 2; }
+.mp-lbl.boxed, .mp-lbl.boxed.hov { fill: #111; stroke: none; }
 .mp-flbl { font-size: calc(var(--mp-feat, 12px) * 0.94); font-weight: 600; pointer-events: none; }
 .mp-hang { fill: none; stroke-width: 2; stroke-linejoin: round; cursor: pointer; }
 .mp-hang.hov, .mp-hang.on { stroke: #e5322d; }
@@ -2084,6 +2088,13 @@ function splitRingLabels(L) {
 /* map font sizes (Display ▸ Map font sizes…): feature names and plasmid name; everything else in the map scales from them */
 const mapFonts = () => { const S = App.settings; return { feat: clamp(+S.mapFeatFont || 12, 2, 60), name: clamp(+S.mapNameFont || 16, 2, 60), enz: clamp(+S.mapEnzFont || 10, 2, 60) }; };
 const mapShapeW = () => clamp(+App.settings.mapShapeW || 16.5, 2, 60);   // thickness of the feature shapes
+/* feature name with an optional round-corner box in the feature's colour (Display ▸ Colour feature names); anchor: x is where the name starts (s = 1) or ends (s = -1) */
+function featNameSvg(f, F, x, y, s, doc) {
+  const box = App.settings.mapNameBox, tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
+  const w = textWidth(f.name, `700 ${F.feat}px system-ui, sans-serif`) + 10, h = F.feat * 1.3;
+  const rect = box ? `<rect class="mp-lbx${doc.selFid === f.id ? ' on' : ''}" data-fid="${f.id}" x="${f2(s === 1 ? x - 5 : x - w + 5)}" y="${f2(y - h / 2)}" width="${f2(w)}" height="${f2(h)}" rx="${f2(h * 0.3)}" fill="${f.color}"/>` : '';
+  return `${rect}<text class="mp-lbl${box ? ' boxed' : ''}" data-fid="${f.id}" ${tattr}>${esc(f.name)}</text>`;
+}
 const mapFontStyle = F => `--mp-feat:${F.feat}px;--mp-name:${F.name}px;--mp-enz:${F.enz}px`;
 
 function renderCircular(doc, host) {
@@ -2149,14 +2160,14 @@ function renderCircular(doc, host) {
   const segMin = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, -((ax - CCX) * dx + (ay - CCY) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(ax + t * dx - CCX, ay + t * dy - CCY); };
   const labText = l => l.kind === 'e' ? `${l.g.names.join(', ')} (${l.g.top})` : l.text;
   const labFont = l => l.kind === 'e' ? `600 ${F.enz}px system-ui, sans-serif` : `700 ${F.feat}px system-ui, sans-serif`;
-  const labH = l => l.kind === 'e' ? 1.17 * F.enz : 1.125 * F.feat;
+  const labH = l => l.kind === 'e' ? 1.17 * F.enz : (App.settings.mapNameBox ? 1.45 : 1.125) * F.feat;
   // draws one name (right of the vertical axis: starts at x, left: ends at x) with its leader, which meets the near end of the name
   const emit = (l, s, x, y) => {
     const [ax, ay] = polar(l.rr, l.theta), lx = x - s * 3;
     // straight from the start of the leader to the name; if that would dip back towards the ring, leave the shape radially first
     let pts = `${f2(ax)},${f2(ay)} ${f2(lx)},${f2(y)}`;
     if (segMin(ax, ay, lx, y) < l.rr - 0.5) { const [ex, ey] = polar(Math.max(Re, l.rr), l.theta); pts = `${f2(ax)},${f2(ay)} ${f2(ex)},${f2(ey)} ${f2(lx)},${f2(y)}`; }
-    const lw = textWidth(labText(l), labFont(l)) + 6;
+    const lw = textWidth(labText(l), labFont(l)) + (l.kind === 'f' && App.settings.mapNameBox ? 12 : 6);
     bx0 = Math.min(bx0, s === 1 ? x : x - lw); bx1 = Math.max(bx1, s === 1 ? x + lw : x); by0 = Math.min(by0, y - 10); by1 = Math.max(by1, y + 10);
     const tattr = `x="${f2(x)}" y="${f2(y)}" text-anchor="${s === 1 ? 'start' : 'end'}" dominant-baseline="central"`;
     if (l.kind === 'e') {
@@ -2164,7 +2175,7 @@ function renderCircular(doc, host) {
       text.push(enzGroupSvg(l.g, `class="mp-lbl enz" ${tattr}`, s === -1));
     } else {
       under.push(`<polyline class="mp-lead${doc.selFid === l.f.id ? ' on' : ''}" data-fid="${l.f.id}" points="${pts}"/>`);
-      text.push(`<text class="mp-lbl" data-fid="${l.f.id}" ${tattr}>${esc(l.text)}</text>`);
+      text.push(featNameSvg(l.f, F, x, y, s, doc));
     }
   };
   // all names stand in two columns (SnapGene style): each column keeps the order around the ring and follows a circle that is larger than the ring, reaching
@@ -2230,7 +2241,7 @@ function renderLinear(doc, host) {
 
   // features lanes
   const items = feats.map(f => {
-    const nameW = textWidth(f.name, `700 ${F.feat}px system-ui, sans-serif`) + 8;
+    const nameW = textWidth(f.name, `700 ${F.feat}px system-ui, sans-serif`) + (App.settings.mapNameBox ? 16 : 8);
     const [a, b] = featBounds(f); const bw = (X(b) - X(a));
     const inside = nameW <= bw - 14;
     const ivs = f.locs.concat(hangSegs(f, n)).map(([s, e]) => [X(s), X(e)]);
@@ -2276,8 +2287,8 @@ function renderLinear(doc, host) {
     }
     const [a, b] = featBounds(f);
     if (it.inside) out.push(`<text class="mp-flbl" data-fid="${f.id}" x="${f2((X(a) + X(b)) / 2)}" y="${y + FH / 2}" text-anchor="middle" dominant-baseline="central" fill="${textOn(f.color)}">${esc(f.name)}</text>`);
-    else if (f.strand === -1) out.push(`<text class="mp-lbl" data-fid="${f.id}" x="${f2(X(a) - 4)}" y="${y + FH / 2}" text-anchor="end" dominant-baseline="central">${esc(f.name)}</text>`);
-    else out.push(`<text class="mp-lbl" data-fid="${f.id}" x="${f2(X(b) + 4)}" y="${y + FH / 2}" dominant-baseline="central">${esc(f.name)}</text>`);
+    else if (f.strand === -1) out.push(featNameSvg(f, F, X(a) - (App.settings.mapNameBox ? 8 : 4), y + FH / 2, -1, doc));
+    else out.push(featNameSvg(f, F, X(b) + (App.settings.mapNameBox ? 8 : 4), y + FH / 2, 1, doc));
   }
   if (!sel) out.push(`<line class="mp-caret" x1="${f2(X(doc.caret))}" y1="${enzRows * EH + 12}" x2="${f2(X(doc.caret))}" y2="${H - 8}"/>`);
   out.push(`<text class="mp-title lin" x="${LIN_M}" y="16">${esc(doc.name)} <tspan class="mp-sub small">· ${n.toLocaleString('en-US')} bp · linear</tspan></text>`);
@@ -3239,7 +3250,7 @@ const actions = {
   display: e => {
     const r = e.target.closest('button').getBoundingClientRect(), S = App.settings;
     const tog = (k, label) => ({ label, checked: S[k], action: () => { S[k] = !S[k]; saveSettings(); requestUpdate(true); } });
-    showMenu(r.left, r.bottom + 4, [tog('showFeatures', 'Features'), tog('showOrfs', 'Open reading frames'), tog('showTrans', 'Amino acids in CDS bars'), tog('mapOverlap', 'Overlap feature shapes on circular map'), '-',
+    showMenu(r.left, r.bottom + 4, [tog('showFeatures', 'Features'), tog('showOrfs', 'Open reading frames'), tog('showTrans', 'Amino acids in CDS bars'), tog('mapOverlap', 'Overlap feature shapes on circular map'), tog('mapNameBox', 'Colour boxes behind feature names'), '-',
       { label: 'Map sizes (fonts, shape width)…', action: openMapFontDialog }, '-',
       { label: 'Zoom linear map in', action: () => { S.linZoom = Math.min(S.linZoom * 1.5, 12); saveSettings(); requestUpdate(false); } },
       { label: 'Zoom linear map out', action: () => { S.linZoom = Math.max(S.linZoom / 1.5, 1); saveSettings(); requestUpdate(false); } }]);

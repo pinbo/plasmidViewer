@@ -129,6 +129,10 @@ svg.map.lin { width: auto; height: auto; }
 .mp-lbl { fill: var(--text); font-size: var(--mp-feat, 12px); font-weight: 700; cursor: pointer; }
 .mp-lbl.enz { fill: var(--enz); font-weight: 600; font-size: var(--mp-enz, 10px); }
 .mp-lbl:hover { text-decoration: underline; }
+.mp-lbx { stroke: rgba(0,0,0,.28); stroke-width: .8; cursor: pointer; }
+.mp-lbx.on { stroke: var(--text); stroke-width: 2; }
+.mp-lbx.hov { stroke: #e5322d; stroke-width: 2; }
+.mp-lbl.boxed, .mp-lbl.boxed.hov { fill: #111; stroke: none; }
 .mp-flbl { font-size: calc(var(--mp-feat, 12px) * 0.94); font-weight: 600; pointer-events: none; }
 .mp-hang { fill: none; stroke-width: 2; stroke-linejoin: round; cursor: pointer; }
 .mp-hang.hov, .mp-hang.on { stroke: #e5322d; }
